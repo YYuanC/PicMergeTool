@@ -10,7 +10,7 @@ from io import BytesIO
 import time
 
 
-global direction,picNumOfDirection,TargetResolutionNum, outputPath
+global direction,picNumOfDirection,TargetResolutionNum, outputPath , needTrim
 def setParam(setdirection, setpicNumOfDirection):
     global direction,picNumOfDirection,TargetResolutionNum
     direction = setdirection
@@ -30,6 +30,8 @@ with tab2:
             index=0,
             placeholder="Please Select",
             )
+    needTrim = st.checkbox("使用裁切为正方形",value=False)
+    
     quality = st.slider('质量', 0, 100, 92)
 
     if(option == "1080P"):
@@ -73,7 +75,7 @@ with tab1:
             filesBytes.append(BytesIO(uploaded_file.getvalue()))
         progress_text = "处理中"
         progressBar = st.progress(0, text=progress_text)
-        result = core.main(filesBytes,direction,picNumOfDirection,TargetResolutionNum, outputPath, quality, progressBar)
+        result = core.main(filesBytes,direction,picNumOfDirection,TargetResolutionNum, outputPath, quality, progressBar, needTrim)
 
         info = st.info(result)
         time.sleep(3)

@@ -19,8 +19,9 @@ def processPrinter(i: int, total: int, progressBar):
     progressBar.progress(1.0, text=progress_text)
 
 
-def openWithRotateFromExif(file):
+def openWithRotateFromExif(file,needTrim):
   image = Image.open(file)
+  print(image.size)
   try:
     for orientation in ExifTags.TAGS.keys():
       if ExifTags.TAGS[orientation] == 'Orientation':
@@ -37,6 +38,15 @@ def openWithRotateFromExif(file):
   except Exception as e:
     # cases: image don't have getexif
     pass
+  try:
+    if needTrim:  
+      width, height = image.size
+      min_dim = min(width, height)
+      start_x = (width - min_dim) // 2
+      start_y = (height - min_dim) // 2
+      image = image.crop((start_x, start_y, start_x + min_dim, start_y + min_dim))
+  except Exception as e:
+    print("裁切时出错",e)
   return image
 
 def geneJpg(size: Size):
@@ -58,8 +68,8 @@ def paste(_from, _to, box: Box):
 
 
 # 文件名水平排列
-def mergeHorizon(progressBar, allFiles: List, rows: int = 1, height: int = 512):
-  imgs = [openWithRotateFromExif(f) for f in allFiles]
+def mergeHorizon(progressBar,needTrim, allFiles: List, rows: int = 1, height: int = 512):
+  imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
   total = len(imgs)
   cols = math.ceil(total / rows)
   base = geneJpg((1, 1))
@@ -82,8 +92,8 @@ def mergeHorizon(progressBar, allFiles: List, rows: int = 1, height: int = 512):
   return base
 
 # 文件名竖直排列
-def mergeVertical(progressBar, allFiles: List[str], cols: int = 1, width: int = 512):
-  imgs = [openWithRotateFromExif(f) for f in allFiles]
+def mergeVertical(progressBar, needTrim, allFiles: List[str], cols: int = 1, width: int = 512):
+  imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
   total = len(imgs)
   rows = math.ceil(total / cols)
   base = geneJpg((1, 1))
@@ -105,7 +115,7 @@ def mergeVertical(progressBar, allFiles: List[str], cols: int = 1, width: int = 
       corner[1] += newSize[1]
   return base
 
-def main(allFiles,direction,picNumOfDirection,TargetResolutionNum,outputPath, quality, progressBar):
+def main(allFiles,direction,picNumOfDirection,TargetResolutionNum,outputPath, quality, progressBar,needTrim):
   
   try:
     resultName = "图片拼接--%s--%s" % (time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()), random.randint(1, 10000))
@@ -114,6 +124,7 @@ def main(allFiles,direction,picNumOfDirection,TargetResolutionNum,outputPath, qu
     if(direction == "水平排列"):
       mergeHorizon(
         progressBar,
+        needTrim,
         allFiles,
         picNumOfDirection,
         TargetResolutionNum
@@ -121,6 +132,7 @@ def main(allFiles,direction,picNumOfDirection,TargetResolutionNum,outputPath, qu
     else:
       mergeVertical(
         progressBar,
+        needTrim,
         allFiles,
         picNumOfDirection,
         TargetResolutionNum
