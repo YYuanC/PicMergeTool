@@ -22,6 +22,8 @@ def setParam(setdirection, setpicNumOfDirection):
 
 tab1, tab2 = st.tabs(["基本", "分辨率/质量"])
 with tab2:
+    outputPath = st.text_input('输出目录', r'C:\Users\Public\Apps\拼图工具\output')
+    st.write('生成的图片将会存放到', outputPath)
     option = st.selectbox(
             "图片分辨率",
             ("1080P", "4K"),
@@ -34,8 +36,7 @@ with tab2:
         TargetResolution = [1920,1080]
     elif(option == "4K"):
         TargetResolution = [4096,2160]
-    outputPath = st.text_input('输出目录', r'C:\Users\YuanC\Desktop\Plog\拼图')
-    st.write('生成的图片将会存放到', outputPath)
+    
 
 with tab1:
 
