@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
+# openWithRotateFromExif and merge module modified from xiaomingTang/img-handler
 from typing import List, Tuple
 from PIL import Image, ExifTags
 from tangUtils.main import Base
 import math, time, random, pathlib
 
-# 读取config文件
 
 Size = Tuple[int, int]
 Box = Tuple[int, int, int, int]
