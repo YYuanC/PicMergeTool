@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 # openWithRotateFromExif and merge module modified from xiaomingTang/img-handler
 from typing import List, Tuple
 from PIL import Image, ExifTags
@@ -21,7 +21,6 @@ def processPrinter(i: int, total: int, progressBar):
 
 def openWithRotateFromExif(file,needTrim):
   image = Image.open(file)
-  print(image.size)
   try:
     for orientation in ExifTags.TAGS.keys():
       if ExifTags.TAGS[orientation] == 'Orientation':

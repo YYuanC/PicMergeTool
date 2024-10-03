@@ -26,7 +26,7 @@ with tab2:
     st.write('生成的图片将会存放到', outputPath)
     option = st.selectbox(
             "图片分辨率",
-            ("1080P", "4K"),
+            ("4K", "1080P"),
             index=0,
             placeholder="Please Select",
             )
@@ -44,6 +44,7 @@ with tab1:
 
     with st.form("my-form", clear_on_submit=True):
         uploaded_files = st.file_uploader("请选择图片：",type=['png', 'jpg', 'jpeg', "bmp", "ico", "tga", "tiff"], accept_multiple_files=True,key="fileUploader")
+        needSort = st.checkbox("自动排序",value=False)
         submitted = st.form_submit_button("Generate")
     option = st.selectbox(
         "选择配置",
@@ -69,6 +70,8 @@ with tab1:
 
         
     if uploaded_files:
+        if(needSort):
+            uploaded_files = sorted(uploaded_files, key=lambda x: x.name)
         filesBytes = []
         for uploaded_file in uploaded_files:
             #st.write("filename:", uploaded_file.name)
