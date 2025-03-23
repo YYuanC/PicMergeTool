@@ -24,7 +24,7 @@ def bytes_to_base64_data_url(image_bytes, image_format="image/jpeg"):
 st.title("PicMerge")
 tab1, tab2, tab3 = st.tabs(["基本", "调整" ,"分辨率/质量"])
 with tab3:
-    outputPath = st.text_input('输出目录', r'C:\Users\Public\Apps\拼图工具\output')
+    outputPath = st.text_input('输出目录', r'C:\output')
     st.write('生成的图片将会存放到', outputPath)
     option = st.selectbox(
             "图片分辨率",
