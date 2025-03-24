@@ -108,10 +108,26 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: 下载所有构建产物
+      - name: 下载 Windows 构建产物
         uses: actions/download-artifact@v3
         with:
-          path: artifacts
+          name: windows-build
+          path: artifacts/windows-build
+      
+      - name: 下载 macOS 构建产物
+        uses: actions/download-artifact@v3
+        with:
+          name: macos-build
+          path: artifacts/macos-build
+      
+      - name: 下载 Linux 构建产物
+        uses: actions/download-artifact@v3
+        with:
+          name: linux-build
+          path: artifacts/linux-build
+      
+      - name: 查看文件结构
+        run: find artifacts -type f | sort
       
       - name: 创建 Pre-release
         uses: softprops/action-gh-release@v1
