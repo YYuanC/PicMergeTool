@@ -32,8 +32,8 @@ jobs:
           enable-plugins: pyside6
           include-package: core
           disable-console: true
+          standalone: true
           onefile: true
-          mode: standalone
           output-dir: build
 
       - name: 上传 Windows 构建产物
@@ -67,7 +67,7 @@ jobs:
           enable-plugins: pyside6
           include-package: core
           macos-create-app-bundle: true
-          mode: standalone
+          standalone: true
           output-dir: build
 
       - name: 打包应用
@@ -110,8 +110,8 @@ jobs:
           script-name: GUI.py
           enable-plugins: pyside6
           include-package: core
+          standalone: true
           onefile: true
-          mode: standalone
           output-dir: build
 
       - name: 准备 Linux 发布文件
