@@ -25,18 +25,18 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --include-package=core --output-dir=dist GUI.py --assume-yes-for-downloads
+          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
       
-      - name: 打包应用
+      - name: 重命名可执行文件
         run: |
           cd dist
-          powershell Compress-Archive -Path GUI.dist -DestinationPath PicMerge-Windows.zip
+          Rename-Item -Path "GUI.exe" -NewName "PicMerge-Windows.exe"
       
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: dist/PicMerge-Windows.zip
+          path: dist/PicMerge-Windows.exe
 
   build-macos:
     runs-on: macos-latest
@@ -60,12 +60,13 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --include-package=core --output-dir=dist GUI.py --assume-yes-for-downloads
+          python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
       
-      - name: 打包应用
+      - name: 重命名应用
         run: |
           cd dist
-          zip -r PicMerge-macOS.zip GUI.app
+          mv GUI.app PicMerge.app
+          zip -r PicMerge-macOS.zip PicMerge.app
       
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -93,18 +94,19 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
       
-      - name: 打包应用
+      - name: 重命名可执行文件
         run: |
           cd dist
-          zip -r PicMerge-Linux.zip GUI.dist
+          mv GUI.bin PicMerge-Linux
+          chmod +x PicMerge-Linux
       
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: dist/PicMerge-Linux.zip
+          path: dist/PicMerge-Linux
 
   create-release:
     needs: [build-windows, build-macos, build-ubuntu]
@@ -139,9 +141,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/windows-build/PicMerge-Windows.zip
+            artifacts/windows-build/PicMerge-Windows.exe
             artifacts/macos-build/PicMerge-macOS.zip
-            artifacts/linux-build/PicMerge-Linux.zip
+            artifacts/linux-build/PicMerge-Linux
           prerelease: true
           generate_release_notes: true
           name: PicMerge 预发布 ${{ github.ref_name }}
