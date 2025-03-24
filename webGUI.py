@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import core
+from core import core
 from io import BytesIO
 import time
 import pandas as pd
