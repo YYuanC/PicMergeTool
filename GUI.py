@@ -16,7 +16,7 @@ from qfluentwidgets import (FluentWindow, NavigationInterface, NavigationItemPos
                            StrongBodyLabel, BodyLabel, CheckBox, RadioButton, Slider, 
                            PushButton, ProgressBar, ComboBox, LineEdit, setThemeColor,
                            SmoothScrollArea, TitleLabel, SubtitleLabel, CardWidget)
-import core
+import core.core
 
 class ProgressBarWorker(QThread):
     """处理后台任务的工作线程"""
