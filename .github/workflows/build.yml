@@ -11,166 +11,143 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: 设置 Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          architecture: 'x64'
           cache: 'pip'
-      
+
       - name: 安装依赖
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
-      - name: 使用 Nuitka 构建
+          pip install pyside6
+
+      - name: 构建 Windows 可执行文件
         uses: Nuitka/Nuitka-Action@main
         with:
           nuitka-version: main
           script-name: GUI.py
-          enable-plugin: pyside6
+          enable-plugins: pyside6
           include-package: core
           disable-console: true
           onefile: true
-          standalone: true
-          output-dir: dist
-      
-      - name: 重命名可执行文件
-        run: |
-          cd dist
-          Rename-Item -Path "GUI.exe" -NewName "PicMerge-Windows.exe"
-      
-      - name: 上传构建产物
+          mode: standalone
+          output-dir: build
+
+      - name: 上传 Windows 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: dist/PicMerge-Windows.exe
+          path: build/GUI.exe
 
   build-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: 设置 Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
           cache: 'pip'
-      
+
       - name: 安装依赖
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      
-      - name: 安装 C 编译器缓存
         run: |
           brew install ccache
-      
-      - name: 使用 Nuitka 构建
-        uses: Nuitka/Nuitka-Action@main 
-        with:
-          nuitka-version: main
-          script-name: GUI.py
-          enable-plugin: pyside6
-          include-package: core
-          macos-create-app-bundle: true
-          onefile: true
-          standalone: true
-          output-dir: dist
-      
-      - name: 重命名应用
-        run: |
-          cd dist
-          mv GUI.app PicMerge.app
-          zip -r PicMerge-macOS.zip PicMerge.app
-      
-      - name: 上传构建产物
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: dist/PicMerge-macOS.zip
-
-  build-ubuntu:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: 设置 Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-      
-      - name: 安装依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgl1 libegl1 libxrandr2 libxss1 libxcursor1 libxcomposite1 libxi6 libxtst6 libasound2-dev
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
-      - name: 使用 Nuitka 构建
+          pip install pyside6
+
+      - name: 构建 macOS 应用包
         uses: Nuitka/Nuitka-Action@main
         with:
           nuitka-version: main
-          script-name: GUI.py 
-          enable-plugin: pyside6
+          script-name: GUI.py
+          enable-plugins: pyside6
+          include-package: core
+          macos-create-app-bundle: true
+          mode: standalone
+          output-dir: build
+
+      - name: 打包应用
+        run: |
+          cd build
+          mv GUI.app PicMerge.app
+          zip -r PicMerge-macOS.zip PicMerge.app
+
+      - name: 上传 macOS 构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: build/PicMerge-macOS.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1 libxcb-xinerama0
+
+      - name: 安装 Python 依赖
+        run: |
+          pip install -r requirements.txt
+          pip install pyside6
+
+      - name: 构建 Linux 可执行文件
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: GUI.py
+          enable-plugins: pyside6
           include-package: core
           onefile: true
-          standalone: true
-          output-dir: dist
-      
-      - name: 重命名可执行文件
+          mode: standalone
+          output-dir: build
+
+      - name: 准备 Linux 发布文件
         run: |
-          cd dist
+          cd build
           mv GUI.bin PicMerge-Linux
           chmod +x PicMerge-Linux
-      
-      - name: 上传构建产物
+
+      - name: 上传 Linux 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: dist/PicMerge-Linux
+          path: build/PicMerge-Linux
 
   create-release:
-    needs: [build-windows, build-macos, build-ubuntu]
+    needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      
-      - name: 下载 Windows 构建产物
+
+      - name: 下载构建产物
         uses: actions/download-artifact@v4
         with:
-          name: windows-build
-          path: artifacts/windows-build
-      
-      - name: 下载 macOS 构建产物
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-build
-          path: artifacts/macos-build
-      
-      - name: 下载 Linux 构建产物
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-build
-          path: artifacts/linux-build
-      
-      - name: 查看文件结构
-        run: find artifacts -type f | sort
-      
-      - name: 创建 Pre-release
+          path: artifacts
+
+      - name: 创建预发布版本
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/windows-build/PicMerge-Windows.exe
+            artifacts/windows-build/GUI.exe
             artifacts/macos-build/PicMerge-macOS.zip
             artifacts/linux-build/PicMerge-Linux
           prerelease: true
           generate_release_notes: true
-          name: PicMerge Preview
           tag_name: preview
-          draft: false  # 确保直接发布而非草稿
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
