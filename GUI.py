@@ -539,6 +539,9 @@ class PicMergeApp(FluentWindow):
     
     def update_file_list(self):
         """更新文件列表显示"""
+        # 保存当前滚动位置
+        current_scroll_value = self.basic_page.preview_scroll.verticalScrollBar().value()
+        
         while self.basic_page.preview_layout.count():
             item = self.basic_page.preview_layout.takeAt(0)
             widget = item.widget()
@@ -557,6 +560,9 @@ class PicMergeApp(FluentWindow):
         
         if self.uploaded_files:
             self.basic_page.preview_layout.addStretch(1)
+        
+        # 使用QTimer延迟恢复滚动位置，确保UI已更新
+        QTimer.singleShot(10, lambda: self.basic_page.preview_scroll.verticalScrollBar().setValue(current_scroll_value))
     
     def move_file_up(self, index):
         """上移文件"""
@@ -761,4 +767,4 @@ if __name__ == '__main__':
     
     window = PicMergeApp()
     window.show()
-    sys.exit(app.exec()) 
+    sys.exit(app.exec())
