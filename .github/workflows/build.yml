@@ -10,7 +10,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: 设置 Python
         uses: actions/setup-python@v4
@@ -33,7 +33,7 @@ jobs:
           powershell Compress-Archive -Path GUI_QT.dist -DestinationPath PicMerge-Windows.zip
       
       - name: 上传构建产物
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: dist/PicMerge-Windows.zip
@@ -41,7 +41,7 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: 设置 Python
         uses: actions/setup-python@v4
@@ -64,7 +64,7 @@ jobs:
           zip -r PicMerge-macOS.zip GUI_QT.dist
       
       - name: 上传构建产物
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: dist/PicMerge-macOS.zip
@@ -72,7 +72,7 @@ jobs:
   build-ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: 设置 Python
         uses: actions/setup-python@v4
@@ -97,7 +97,7 @@ jobs:
           zip -r PicMerge-Linux.zip GUI_QT.dist
       
       - name: 上传构建产物
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux-build
           path: dist/PicMerge-Linux.zip
@@ -106,22 +106,22 @@ jobs:
     needs: [build-windows, build-macos, build-ubuntu]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: 下载 Windows 构建产物
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: windows-build
           path: artifacts/windows-build
       
       - name: 下载 macOS 构建产物
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: macos-build
           path: artifacts/macos-build
       
       - name: 下载 Linux 构建产物
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: linux-build
           path: artifacts/linux-build
