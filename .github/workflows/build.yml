@@ -22,25 +22,24 @@ jobs:
       - name: 安装依赖
         run: |
           pip install -r requirements.txt
-          pip install pyside6
+          pip install pyside6 pyinstaller
+
+      - name: 安装 UPX
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri "https://github.com/upx/upx/releases/download/v4.2.1/upx-4.2.1-win64.zip" -OutFile "upx.zip"
+          Expand-Archive -Path "upx.zip" -DestinationPath "."
+          Move-Item -Path "upx-4.2.1-win64\upx.exe" -Destination "upx.exe"
 
       - name: 构建 Windows 可执行文件
-        uses: Nuitka/Nuitka-Action@main
-        with:
-          nuitka-version: main
-          script-name: GUI.py
-          enable-plugins: pyside6
-          include-package: core
-          disable-console: true
-          standalone: true
-          onefile: true
-          output-dir: build
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core;core" --upx-dir="./" GUI.py
 
       - name: 上传 Windows 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: build/GUI.exe
+          path: dist/PicMerge.exe
 
   build-macos:
     runs-on: macos-latest
@@ -55,32 +54,27 @@ jobs:
 
       - name: 安装依赖
         run: |
-          brew install ccache
           pip install -r requirements.txt
-          pip install pyside6
+          pip install pyside6 pyinstaller
+
+      - name: 安装 UPX
+        run: |
+          brew install upx
 
       - name: 构建 macOS 应用包
-        uses: Nuitka/Nuitka-Action@main
-        with:
-          nuitka-version: main
-          script-name: GUI.py
-          enable-plugins: pyside6
-          include-package: core
-          macos-create-app-bundle: true
-          standalone: true
-          output-dir: build
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core:core" --upx-dir="/usr/local/bin" GUI.py
 
       - name: 打包应用
         run: |
-          cd build
-          mv GUI.app PicMerge.app
+          cd dist
           zip -r PicMerge-macOS.zip PicMerge.app
 
       - name: 上传 macOS 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: build/PicMerge-macOS.zip
+          path: dist/PicMerge-macOS.zip
 
   build-linux:
     runs-on: ubuntu-latest
@@ -96,35 +90,26 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1 libxcb-xinerama0
+          sudo apt-get install -y libgl1 libxcb-xinerama0 upx
 
       - name: 安装 Python 依赖
         run: |
           pip install -r requirements.txt
-          pip install pyside6
+          pip install pyside6 pyinstaller
 
       - name: 构建 Linux 可执行文件
-        uses: Nuitka/Nuitka-Action@main
-        with:
-          nuitka-version: main
-          script-name: GUI.py
-          enable-plugins: pyside6
-          include-package: core
-          standalone: true
-          onefile: true
-          output-dir: build
+        run: |
+          pyinstaller --noconfirm --onefile --name "PicMerge-Linux" --add-data "core:core" --upx-dir="/usr/bin" GUI.py
 
       - name: 准备 Linux 发布文件
         run: |
-          cd build
-          mv GUI.bin PicMerge-Linux
-          chmod +x PicMerge-Linux
+          chmod +x dist/PicMerge-Linux
 
       - name: 上传 Linux 构建产物
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: build/PicMerge-Linux
+          path: dist/PicMerge-Linux
 
   create-release:
     needs: [build-windows, build-macos, build-linux]
@@ -143,7 +128,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/windows-build/GUI.exe
+            artifacts/windows-build/PicMerge.exe
             artifacts/macos-build/PicMerge-macOS.zip
             artifacts/linux-build/PicMerge-Linux
           prerelease: true
