@@ -25,12 +25,12 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --windows-icon-from-ico=icon.ico --include-package=core --output-dir=dist GUI_QT.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --windows-icon-from-ico=icon.ico --include-package=core --output-dir=dist GUI.py
       
       - name: 打包应用
         run: |
           cd dist
-          powershell Compress-Archive -Path GUI_QT.dist -DestinationPath PicMerge-Windows.zip
+          powershell Compress-Archive -Path GUI.dist -DestinationPath PicMerge-Windows.zip
       
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -56,12 +56,12 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI_QT.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI.py
       
       - name: 打包应用
         run: |
           cd dist
-          zip -r PicMerge-macOS.zip GUI_QT.dist
+          zip -r PicMerge-macOS.zip GUI.dist
       
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -89,12 +89,12 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI_QT.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI.py
       
       - name: 打包应用
         run: |
           cd dist
-          zip -r PicMerge-Linux.zip GUI_QT.dist
+          zip -r PicMerge-Linux.zip GUI.dist
       
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
