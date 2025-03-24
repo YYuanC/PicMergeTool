@@ -115,7 +115,6 @@ if uploaded_files:
             df = df.sort_values(by='index')
             for _, row in df.iterrows():
                 if row["choose"]== True:
-                    print(row["choose"])
                     # 提取图片数据
                     image_data = row["image"]
                     # 将base64编码的图片数据转换为字节流

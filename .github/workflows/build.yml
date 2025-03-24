@@ -1,0 +1,128 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 设置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 使用 Nuitka 构建
+        run: |
+          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --windows-icon-from-ico=icon.ico --include-package=core --output-dir=dist GUI_QT.py
+      
+      - name: 打包应用
+        run: |
+          cd dist
+          powershell Compress-Archive -Path GUI_QT.dist -DestinationPath PicMerge-Windows.zip
+      
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-build
+          path: dist/PicMerge-Windows.zip
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 设置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 使用 Nuitka 构建
+        run: |
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI_QT.py
+      
+      - name: 打包应用
+        run: |
+          cd dist
+          zip -r PicMerge-macOS.zip GUI_QT.dist
+      
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-build
+          path: dist/PicMerge-macOS.zip
+
+  build-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 设置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-glx libegl1-mesa libxrandr2 libxrandr2 libxss1 libxcursor1 libxcomposite1 libasound2 libxi6 libxtst6
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: 使用 Nuitka 构建
+        run: |
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI_QT.py
+      
+      - name: 打包应用
+        run: |
+          cd dist
+          zip -r PicMerge-Linux.zip GUI_QT.dist
+      
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-build
+          path: dist/PicMerge-Linux.zip
+
+  create-release:
+    needs: [build-windows, build-macos, build-ubuntu]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      
+      - name: 创建 Pre-release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/windows-build/PicMerge-Windows.zip
+            artifacts/macos-build/PicMerge-macOS.zip
+            artifacts/linux-build/PicMerge-Linux.zip
+          prerelease: true
+          generate_release_notes: true
+          name: PicMerge 预发布 ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
