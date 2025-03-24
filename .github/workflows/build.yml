@@ -60,7 +60,7 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --include-package=core --output-dir=dist GUI.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --include-package=core --output-dir=dist GUI.py --assume-yes-for-downloads
       
       - name: 打包应用
         run: |
@@ -144,5 +144,6 @@ jobs:
           generate_release_notes: true
           name: PicMerge 预发布 ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
+          draft: false  # 确保直接发布而非草稿
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
