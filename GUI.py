@@ -1,463 +1,599 @@
 # -*- coding: utf-8 -*-
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import sv_ttk
-import core
-from io import BytesIO
-import os
-from PIL import Image, ImageTk
-import threading
-import time
 import sys
+import os
+import threading
+from io import BytesIO
+from PIL import Image, ImageQt
 
-# 为了支持拖放功能，添加TkinterDnD库
-try:
-    from tkinterdnd2 import DND_FILES, TkinterDnD
-except ImportError:
-    # 如果未安装tkinterdnd2，则显示提示并禁用拖放功能
-    DND_FILES = None
-    TkinterDnD = tk.Tk
-    print("请安装tkinterdnd2以启用拖放功能: pip install tkinterdnd2")
+from PySide6.QtCore import Qt, QSize, Signal, QThread, QMimeData, QUrl, QEvent, QObject, QTimer
+from PySide6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
+                              QHBoxLayout, QFileDialog, QMessageBox, 
+                              QButtonGroup, QFrame)
+from PySide6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QColor
 
-class PicMergeApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("PicMerge")
-        self.root.geometry("800x600")
+from qfluentwidgets import (FluentWindow, NavigationInterface, NavigationItemPosition, 
+                           ScrollArea, FluentIcon, setTheme, Theme, PrimaryPushButton, 
+                           StrongBodyLabel, BodyLabel, CheckBox, RadioButton, Slider, 
+                           PushButton, ProgressBar, ComboBox, LineEdit, setThemeColor,
+                           SmoothScrollArea, TitleLabel, SubtitleLabel, CardWidget)
+import core
+
+class ProgressBarWorker(QThread):
+    """处理后台任务的工作线程"""
+    progress_update = Signal(int, str)
+    completed = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, files_bytes, direction, pic_num, target_resolution, 
+                 output_path, quality, need_trim):
+        super().__init__()
+        self.files_bytes = files_bytes
+        self.direction = direction
+        self.pic_num = pic_num
+        self.target_resolution = target_resolution
+        self.output_path = output_path
+        self.quality = quality
+        self.need_trim = need_trim
+
+    def run(self):
+        try:
+            class ProgressBarAdapter:
+                def __init__(self, worker):
+                    self.worker = worker
+                
+                def progress(self, value, text="处理中"):
+                    self.worker.progress_update.emit(value, text)
+            
+            progress_adapter = ProgressBarAdapter(self)
+            
+            # 调用核心处理函数
+            result = core.main(
+                self.files_bytes,
+                self.direction,
+                self.pic_num,
+                self.target_resolution,
+                self.output_path,
+                self.quality,
+                progress_adapter,
+                self.need_trim
+            )
+            
+            self.completed.emit(result)
+        except Exception as e:
+            self.error.emit(str(e))
+
+
+class FilePreviewItem(CardWidget):
+    """文件预览项组件"""
+    def __init__(self, file_path, index, parent=None):
+        super().__init__(parent)
+        self.file_path = file_path
+        self.index = index
+        self.parent_widget = parent
         
-        # 设置最小窗口尺寸，确保所有元素都能显示
-        self.root.minsize(700, 500)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 2, 10, 2)
         
-        # 应用Sun Valley主题（亮色）
-        sv_ttk.set_theme("light")
+        # 图片预览
+        try:
+            img = Image.open(file_path)
+            img.thumbnail((120, 120)) 
+            q_img = ImageQt.ImageQt(img)
+            pixmap = QPixmap.fromImage(q_img)
+            
+            self.img_label = QLabel()
+            self.img_label.setPixmap(pixmap)
+            self.img_label.setFixedSize(120, 120)
+            layout.addWidget(self.img_label)
+        except Exception:
+            self.img_label = QLabel("无法预览")
+            self.img_label.setFixedSize(120, 120)
+            self.img_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(self.img_label)
         
-        # 全局变量
+        # 文件信息容器
+        info_container = QWidget()
+        info_vlayout = QVBoxLayout(info_container)
+        info_vlayout.setContentsMargins(0, 0, 0, 0)
+        info_vlayout.setSpacing(0)
+        
+        info_layout = QHBoxLayout()
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(10) 
+        
+        self.filename_label = BodyLabel(os.path.basename(file_path))
+        self.filename_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        info_layout.addWidget(self.filename_label, 1)
+        
+        # 控制按钮容器 - 使用两列布局
+        self.btn_container = QWidget()
+        self.btn_layout = QHBoxLayout(self.btn_container)
+        self.btn_layout.setContentsMargins(0, 0, 0, 0)
+        self.btn_layout.setSpacing(8) 
+        
+        self.move_column = QWidget()
+        self.move_layout = QVBoxLayout(self.move_column)
+        self.move_layout.setContentsMargins(0, 0, 0, 0)
+        self.move_layout.setSpacing(2)
+        self.move_layout.setAlignment(Qt.AlignVCenter) 
+        
+        self.delete_column = QWidget()
+        self.delete_layout = QVBoxLayout(self.delete_column)
+        self.delete_layout.setContentsMargins(0, 0, 0, 0)
+        self.delete_layout.setSpacing(0)
+        self.delete_layout.setAlignment(Qt.AlignVCenter)
+        
+        self.btn_layout.addWidget(self.move_column)
+        self.btn_layout.addWidget(self.delete_column)
+        
+        info_layout.addWidget(self.btn_container)
+        
+        info_vlayout.addLayout(info_layout)
+        
+        layout.addWidget(info_container, 1)
+    
+    def set_controls_visible(self, visible):
+        """设置控制按钮是否可见"""
+        # 清除现有按钮
+        while self.move_layout.count():
+            item = self.move_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+        
+        while self.delete_layout.count():
+            item = self.delete_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+        
+        if visible:
+            btn_height = 30
+            btn_width = 60
+            
+            move_buttons = []
+            if self.index > 0:
+                up_btn = PushButton("上移")
+                up_btn.clicked.connect(lambda: self.parent_widget.move_file_up(self.index))
+                move_buttons.append(up_btn)
+            
+            if self.index < len(self.parent_widget.uploaded_files) - 1:
+                down_btn = PushButton("下移")
+                down_btn.clicked.connect(lambda: self.parent_widget.move_file_down(self.index))
+                move_buttons.append(down_btn)
+            
+            if move_buttons:
+                for btn in move_buttons:
+                    btn.setFixedHeight(btn_height)
+                    btn.setFixedWidth(btn_width)
+                    self.move_layout.addWidget(btn)
+            
+            # 删除按钮到
+            delete_btn = PushButton("删除")
+            delete_btn.setFixedHeight(btn_height)
+            delete_btn.setFixedWidth(btn_width)
+            delete_btn.clicked.connect(lambda: self.parent_widget.delete_file(self.index))
+            self.delete_layout.addWidget(delete_btn)
+
+
+class BasicPage(ScrollArea):
+    """基本设置页面"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_app = parent
+        self.setObjectName("BasicPage")
+        
+        self.main_container = QWidget()
+        main_layout = QVBoxLayout(self.main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        self.scroll_content = QWidget()
+        self.scroll_area = SmoothScrollArea()
+        self.scroll_area.setWidget(self.scroll_content)
+        self.scroll_area.setWidgetResizable(True)
+        
+        self.vBoxLayout = QVBoxLayout(self.scroll_content)
+        self.vBoxLayout.setSpacing(20)
+        self.vBoxLayout.setContentsMargins(20, 20, 20, 20)
+        
+        self.title = TitleLabel("图片合并工具")
+        self.title.setObjectName("Title")
+        self.vBoxLayout.addWidget(self.title)
+        
+        self.init_file_selection()
+        
+        self.init_layout_config()
+        
+        self.vBoxLayout.addStretch(1)
+        
+        main_layout.addWidget(self.scroll_area, 1)
+        
+        self.init_bottom_controls()
+        
+        self.setWidget(self.main_container)
+        self.setWidgetResizable(True)
+    
+    def init_file_selection(self):
+        """初始化文件选择区域"""
+        files_card = CardWidget()
+        files_layout = QVBoxLayout(files_card)
+        
+        title_layout = QHBoxLayout()
+        title_layout.addWidget(SubtitleLabel("选择图片"))
+        files_layout.addLayout(title_layout)
+        
+        self.files_label = BodyLabel("已选择0个文件")
+        files_layout.addWidget(self.files_label)
+        
+        # 文件预览区域
+        self.preview_scroll = SmoothScrollArea()
+        self.preview_scroll.setMinimumHeight(350)
+        self.preview_scroll.setWidgetResizable(True)
+        self.preview_content = QWidget()
+        self.preview_layout = QVBoxLayout(self.preview_content)
+        self.preview_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.preview_layout.setSpacing(4)
+        self.preview_scroll.setWidget(self.preview_content)
+        files_layout.addWidget(self.preview_scroll)
+        
+        btn_layout = QHBoxLayout()
+        
+        self.sort_check = CheckBox("自动排序")
+        self.sort_check.setChecked(True)
+        self.sort_check.clicked.connect(self.parent_app.update_sort)
+        btn_layout.addWidget(self.sort_check)
+        
+        btn_layout.addStretch(1)
+        
+        clear_btn = PushButton("清除所有")
+        clear_btn.setFixedHeight(32)
+        clear_btn.clicked.connect(self.parent_app.clear_files)
+        btn_layout.addWidget(clear_btn)
+        
+        browse_btn = PushButton("添加文件")
+        browse_btn.setFixedHeight(32)
+        browse_btn.clicked.connect(self.parent_app.browse_files)
+        btn_layout.addWidget(browse_btn)
+        
+        files_layout.addLayout(btn_layout)
+        
+        self.vBoxLayout.addWidget(files_card)
+    
+    def init_layout_config(self):
+        """初始化排列配置区域"""
+        config_card = CardWidget()
+        config_layout = QVBoxLayout(config_card)
+        
+        # 配置标题
+        config_layout.addWidget(SubtitleLabel("排列配置"))
+        
+        # 排列选项
+        self.config_radio_group = QButtonGroup(self)
+        
+        vertical_single_radio = RadioButton("竖直单列")
+        vertical_single_radio.setChecked(True)
+        vertical_single_radio.clicked.connect(lambda: self.parent_app.update_config("竖直单列"))
+        config_layout.addWidget(vertical_single_radio)
+        self.config_radio_group.addButton(vertical_single_radio)
+        
+        horizontal_single_radio = RadioButton("水平单列")
+        horizontal_single_radio.clicked.connect(lambda: self.parent_app.update_config("水平单列"))
+        config_layout.addWidget(horizontal_single_radio)
+        self.config_radio_group.addButton(horizontal_single_radio)
+        
+        custom_radio = RadioButton("自定义")
+        custom_radio.clicked.connect(lambda: self.parent_app.update_config("自定义"))
+        config_layout.addWidget(custom_radio)
+        self.config_radio_group.addButton(custom_radio)
+        
+        # 自定义配置子区域
+        self.custom_config = QWidget()
+        custom_config_layout = QVBoxLayout(self.custom_config)
+        custom_config_layout.setContentsMargins(20, 0, 0, 0)
+        
+        # 方向选择
+        self.direction_radio_group = QButtonGroup(self)
+        
+        vertical_radio = RadioButton("竖直排列")
+        vertical_radio.setChecked(True)
+        vertical_radio.clicked.connect(lambda: self.parent_app.update_direction("竖直排列"))
+        custom_config_layout.addWidget(vertical_radio)
+        self.direction_radio_group.addButton(vertical_radio)
+        
+        horizontal_radio = RadioButton("水平排列")
+        horizontal_radio.clicked.connect(lambda: self.parent_app.update_direction("水平排列"))
+        custom_config_layout.addWidget(horizontal_radio)
+        self.direction_radio_group.addButton(horizontal_radio)
+        
+        # 数量选择
+        num_layout = QHBoxLayout()
+        self.num_label = BodyLabel("排几列:")
+        num_layout.addWidget(self.num_label)
+        
+        self.num_slider = Slider(Qt.Horizontal)
+        self.num_slider.setRange(1, 9)
+        self.num_slider.setValue(2)
+        self.num_slider.valueChanged.connect(self.parent_app.update_num)
+        num_layout.addWidget(self.num_slider, 1)
+        
+        self.num_value_label = BodyLabel("2")
+        num_layout.addWidget(self.num_value_label)
+        
+        custom_config_layout.addLayout(num_layout)
+        
+        # 默认隐藏自定义配置
+        self.custom_config.setVisible(False)
+        config_layout.addWidget(self.custom_config)
+        
+        self.vBoxLayout.addWidget(config_card)
+        
+        # 在排列配置之后添加输出目录设置
+        self.init_output_path()
+    
+    def init_output_path(self):
+        """初始化输出目录设置"""
+        path_card = CardWidget()
+        path_layout = QVBoxLayout(path_card)
+        
+        # 输出目录标题
+        path_layout.addWidget(SubtitleLabel("输出目录"))
+        
+        # 输出目录控件
+        dir_layout = QHBoxLayout()
+        dir_layout.addWidget(BodyLabel("输出目录:"))
+        
+        self.path_edit = LineEdit()
+        self.path_edit.setText(self.parent_app.outputPath)
+        dir_layout.addWidget(self.path_edit, 1)
+        
+        # 修改目录按钮
+        modify_path_btn = PushButton("修改")
+        modify_path_btn.setFixedHeight(32)  # 增加高度
+        modify_path_btn.clicked.connect(self.parent_app.browse_output_path)
+        dir_layout.addWidget(modify_path_btn)
+        
+        # 浏览目录按钮
+        browse_path_btn = PushButton("浏览")
+        browse_path_btn.setFixedHeight(32)  # 增加高度
+        browse_path_btn.clicked.connect(self.parent_app.open_output_path)
+        dir_layout.addWidget(browse_path_btn)
+        
+        path_layout.addLayout(dir_layout)
+        self.vBoxLayout.addWidget(path_card)
+    
+    def init_bottom_controls(self):
+        """初始化底部控制区域（固定在底部）"""
+        bottom_container = QWidget()
+        bottom_container.setObjectName("BottomContainer")
+        bottom_container.setStyleSheet("#BottomContainer{background-color: #f5f5f5; border-top: 1px solid #e0e0e0;}")
+        
+        bottom_layout = QHBoxLayout(bottom_container)
+        bottom_layout.setContentsMargins(20, 10, 20, 10)
+        
+        self.status_label = BodyLabel("")
+        bottom_layout.addWidget(self.status_label)
+        
+        self.progress_bar = ProgressBar()
+        self.progress_bar.setValue(0)
+        bottom_layout.addWidget(self.progress_bar, 1)
+        
+        bottom_layout.addSpacing(35)
+        
+        self.generate_button = PrimaryPushButton("生成")
+        self.generate_button.setFixedHeight(36)
+        self.generate_button.clicked.connect(self.parent_app.generate)
+        bottom_layout.addWidget(self.generate_button)
+        
+        self.main_container.layout().addWidget(bottom_container)
+
+
+class AdvancedPage(ScrollArea):
+    """高级设置页面"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_app = parent
+        self.setObjectName("AdvancedPage")
+        
+        # 创建主控件和布局
+        self.widget = QWidget()
+        self.setWidget(self.widget)
+        self.setWidgetResizable(True)
+        
+        self.vBoxLayout = QVBoxLayout(self.widget)
+        self.vBoxLayout.setSpacing(20)
+        self.vBoxLayout.setContentsMargins(20, 20, 20, 20)
+        
+        # 添加标题
+        self.title = TitleLabel("高级设置")
+        self.title.setObjectName("Title")
+        self.vBoxLayout.addWidget(self.title)
+        
+        # 高级设置卡片
+        settings_card = CardWidget()
+        settings_layout = QVBoxLayout(settings_card)
+        settings_layout.setSpacing(15)
+        
+        # 图片分辨率
+        res_layout = QHBoxLayout()
+        res_layout.addWidget(BodyLabel("目标分辨率:"))
+        
+        self.res_combo = ComboBox()
+        self.res_combo.addItems(["4K", "2.7K", "1080P"])
+        self.res_combo.setCurrentText("2.7K")
+        self.res_combo.currentTextChanged.connect(self.parent_app.update_resolution)
+        res_layout.addWidget(self.res_combo)
+        res_layout.addStretch(1)
+        
+        settings_layout.addLayout(res_layout)
+        
+        # 使用裁切选项
+        self.trim_check = CheckBox("使用裁切为正方形")
+        self.trim_check.clicked.connect(self.parent_app.update_trim)
+        settings_layout.addWidget(self.trim_check)
+        
+        # 质量滑块
+        quality_layout = QHBoxLayout()
+        quality_layout.addWidget(BodyLabel("质量:"))
+        
+        self.quality_slider = Slider(Qt.Horizontal)
+        self.quality_slider.setRange(0, 100)
+        self.quality_slider.setValue(92)
+        self.quality_slider.valueChanged.connect(self.parent_app.update_quality)
+        quality_layout.addWidget(self.quality_slider, 1)
+        
+        self.quality_value_label = BodyLabel("92")
+        quality_layout.addWidget(self.quality_value_label)
+        
+        settings_layout.addLayout(quality_layout)
+        
+        self.vBoxLayout.addWidget(settings_card)
+        
+        # 添加弹性空间
+        self.vBoxLayout.addStretch(1)
+
+
+class PicMergeApp(FluentWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("PicMerge")
+        
+        self.resize(1200, 800)
+        
+        setTheme(Theme.LIGHT)
+        setThemeColor(QColor(0, 120, 212))
+        
         self.direction = "竖直排列"
         self.picNumOfDirection = 1
         self.TargetResolution = [2560, 1440]
         self.TargetResolutionNum = self.TargetResolution[1]
-        self.outputPath = os.path.join(os.path.expanduser("~"), "output")
+        self.outputPath = os.path.join(os.path.expanduser("~"), "Pictures\PicMergeOutput")
         self.needTrim = False
         self.quality = 92
         self.uploaded_files = []
         self.needSort = True
-        self.enableAdvanced = False
         
-        # 创建全局滚动条变量
-        self.tab1_scrollbar = None
-        
-        # 配置Grid布局
-        self.root.grid_columnconfigure(0, weight=1)
-        self.root.grid_rowconfigure(0, weight=1)
-        self.root.grid_rowconfigure(1, weight=0)  # 底部栏固定高度
-        
-        # 创建主内容区域框架
-        main_frame = ttk.Frame(root)
-        main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        
-        main_frame.grid_columnconfigure(0, weight=1)
-        main_frame.grid_rowconfigure(0, weight=1)
-        
-        # 创建标签页
-        self.notebook = ttk.Notebook(main_frame)
-        self.notebook.grid(row=0, column=0, sticky="nsew")
-        
-        # 创建两个标签页
-        self.tab1 = ttk.Frame(self.notebook)
-        self.tab3 = ttk.Frame(self.notebook)
-        
-        self.notebook.add(self.tab1, text="基本")
-        self.notebook.add(self.tab3, text="高级")
-        
-        # 初始化各个标签页
-        self.init_tab1()
-        self.init_tab3()
-        
-        # 底部的生成按钮和进度条框架
-        self.bottom_frame = ttk.Frame(root)
-        self.bottom_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
-        
-        self.bottom_frame.grid_columnconfigure(1, weight=1)  # 进度条可伸缩
-        
-        self.status_label = ttk.Label(self.bottom_frame, text="")
-        self.status_label.grid(row=0, column=0, padx=5)
-        
-        self.progress = ttk.Progressbar(self.bottom_frame, orient=tk.HORIZONTAL, length=100, mode='determinate')
-        self.progress.grid(row=0, column=1, sticky="ew", padx=5)
-        
-        self.generate_btn = ttk.Button(self.bottom_frame, text="生成", command=self.generate)
-        self.generate_btn.grid(row=0, column=2, padx=5)
-        
-        # 监听窗口大小变化，更新滚动条状态
-        self.root.bind("<Configure>", self.on_window_resize)
-        
-    def init_tab1(self):
-        # 基本标签页内容
-        self.tab1.grid_columnconfigure(0, weight=1)
-        self.tab1.grid_rowconfigure(0, weight=1)
-        
-        # 创建全局滚动区域
-        self.tab1_canvas = tk.Canvas(self.tab1, highlightthickness=0, bd=0)  # 移除边框
-        self.tab1_canvas.grid(row=0, column=0, sticky="nsew")
-        
-        # 初始时创建全局滚动条，但不一定显示
-        self.tab1_scrollbar = ttk.Scrollbar(self.tab1, orient="vertical", command=self.tab1_canvas.yview)
-        
-        self.tab1_canvas.configure(yscrollcommand=self.tab1_scrollbar.set)
-        
-        # 创建内容框架并确保没有额外边距
-        tab1_inner_frame = ttk.Frame(self.tab1_canvas)
-        self.tab1_canvas.create_window((0, 0), window=tab1_inner_frame, anchor="nw")
-        
-        # 确保画布宽度调整时内容框架也随之调整
-        def _configure_tab1_inner_frame(event):
-            # 更新内容框架宽度
-            canvas_width = event.width
-            self.tab1_canvas.itemconfig(self.tab1_canvas.find_withtag("all")[0], width=canvas_width)
-            
-            # 更新滚动区域（轻微延迟确保内容已更新）
-            self.root.after(10, self.check_tab1_scrollbar)
-        
-        # 只保留一个Configure事件绑定
-        self.tab1_canvas.bind('<Configure>', _configure_tab1_inner_frame)
-        
-        # 添加鼠标滚轮支持 - 确保这些绑定不被覆盖
-        self.tab1_canvas.bind("<MouseWheel>", self.on_mousewheel)        # Windows
-        self.tab1_canvas.bind("<Button-4>", self.on_mousewheel)          # Linux 向上滚动
-        self.tab1_canvas.bind("<Button-5>", self.on_mousewheel)          # Linux 向下滚动
-        
-        # 绑定所有子控件也接收鼠标滚轮事件
-        def _bind_mousewheel_to_children(widget):
-            # 递归绑定鼠标滚轮事件到所有子控件
-            for child in widget.winfo_children():
-                # 预览区域单独处理，它有自己的滚动事件
-                if child == self.preview_frame or child == self.preview_canvas:
-                    continue
-                    
-                child.bind("<MouseWheel>", self.on_mousewheel)
-                child.bind("<Button-4>", self.on_mousewheel)
-                child.bind("<Button-5>", self.on_mousewheel)
-                self._bind_mousewheel_to_children(child)
-        
-        tab1_inner_frame.grid_columnconfigure(0, weight=1)
-        
-        # 图片选择框架
-        frame = ttk.LabelFrame(tab1_inner_frame, text="选择图片")
-        frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        
-        frame.grid_columnconfigure(0, weight=1)
-        frame.grid_rowconfigure(1, weight=1)  # 预览区域可伸缩
-        
-        # 文件选择区域
-        self.files_frame = ttk.Frame(frame)
-        self.files_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
-        
-        self.files_frame.grid_columnconfigure(0, weight=1)
-        
-        self.files_label = ttk.Label(self.files_frame, text="已选择0个文件")
-        self.files_label.grid(row=0, column=0, sticky="w", pady=5)
-        
-        # 文件预览和控制区域
-        self.preview_frame = ttk.Frame(frame)
-        self.preview_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
-        
-        self.preview_frame.grid_columnconfigure(0, weight=1)
-        self.preview_frame.grid_rowconfigure(0, weight=1)
-        
-        # 滚动区域
-        self.preview_canvas = tk.Canvas(self.preview_frame)
-        self.preview_canvas.grid(row=0, column=0, sticky="nsew")
-        
-        self.preview_scrollbar = ttk.Scrollbar(self.preview_frame, orient="vertical", command=self.preview_canvas.yview)
-        
-        self.preview_canvas.configure(yscrollcommand=self.preview_scrollbar.set)
-        self.preview_canvas.bind('<Configure>', self.check_preview_scrollbar)
-        
-        self.preview_inner_frame = ttk.Frame(self.preview_canvas)
-        self.preview_canvas.create_window((0, 0), window=self.preview_inner_frame, anchor="nw")
-        
-        btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
-        
-        self.browse_btn = ttk.Button(btn_frame, text="浏览文件", command=self.browse_files)
-        self.browse_btn.grid(row=0, column=0, padx=5)
-        
-        self.clear_btn = ttk.Button(btn_frame, text="清除所有", command=self.clear_files)
-        self.clear_btn.grid(row=0, column=1, padx=5)
-        
-        self.sort_var = tk.BooleanVar(value=True)
-        self.sort_check = ttk.Checkbutton(btn_frame, text="自动排序", variable=self.sort_var,
-                                         command=self.update_sort)
-        self.sort_check.grid(row=0, column=2, padx=5)
-        
-        # 配置选择区域
-        config_frame = ttk.LabelFrame(tab1_inner_frame, text="排列配置")
-        config_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
-        
-        config_frame.grid_columnconfigure(0, weight=1)
-        
-        ttk.Label(config_frame, text="选择配置:").grid(row=0, column=0, sticky="w", padx=10, pady=5)
-        
-        self.config_var = tk.StringVar(value="竖直单列")
-        config_options = ["竖直单列", "水平单列", "自定义"]
-        
-        for i, option in enumerate(config_options):
-            ttk.Radiobutton(config_frame, text=option, variable=self.config_var, value=option,
-                            command=self.update_config).grid(row=i+1, column=0, sticky="w", padx=20, pady=2)
-        
-        # 自定义排列方式子框架
-        self.custom_frame = ttk.Frame(config_frame)
-        self.custom_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=5)
-        
-        self.custom_frame.grid_columnconfigure(0, weight=1)
-        
-        self.direction_var = tk.StringVar(value="竖直排列")
-        ttk.Radiobutton(self.custom_frame, text="竖直排列", variable=self.direction_var, value="竖直排列",
-                        command=self.update_direction).grid(row=0, column=0, sticky="w", pady=2)
-        ttk.Radiobutton(self.custom_frame, text="水平排列", variable=self.direction_var, value="水平排列",
-                        command=self.update_direction).grid(row=1, column=0, sticky="w", pady=2)
-        
-        self.num_frame = ttk.Frame(self.custom_frame)
-        self.num_frame.grid(row=2, column=0, sticky="ew", pady=5)
-        
-        self.num_frame.grid_columnconfigure(1, weight=1)
-        
-        self.num_label = ttk.Label(self.num_frame, text="排几列:")
-        self.num_label.grid(row=0, column=0, padx=5)
-        
-        self.num_var = tk.IntVar(value=2)
-        self.num_scale = ttk.Scale(self.num_frame, from_=1, to=9, orient=tk.HORIZONTAL,
-                                  variable=self.num_var, command=self.update_num)
-        self.num_scale.grid(row=0, column=1, sticky="ew", padx=5)
-        
-        self.num_value_label = ttk.Label(self.num_frame, text="2")
-        self.num_value_label.grid(row=0, column=2, padx=5)
-        
-        # 初始状态下隐藏自定义选项
-        self.custom_frame.grid_remove()
-        
-        # 设置初始参数
-        self.set_param("竖直排列", 1)
-        
-        # 初始更新，显示排序状态
-        self.update_sort()
-        
-        # 启用拖放功能
-        self.preview_frame.drop_target_register('DND_Files')
-        self.preview_frame.dnd_bind('<<Drop>>', self.drop_files)
-        
-        # 为预览区域添加鼠标滚轮支持
-        self.preview_canvas.bind("<MouseWheel>", self.on_preview_mousewheel)
-        self.preview_canvas.bind("<Button-4>", self.on_preview_mousewheel)
-        self.preview_canvas.bind("<Button-5>", self.on_preview_mousewheel)
-        
-        # 绑定子控件的鼠标滚轮事件，但排除预览区域
-        self._bind_mousewheel_to_children(tab1_inner_frame)
-        
-        # 最后检查是否需要滚动条
-        self.root.update_idletasks()
-        self.check_tab1_scrollbar()
-        
-    def init_tab3(self):
-        # 高级选项标签页内容
-        self.tab3.grid_columnconfigure(0, weight=1)
-        
-        frame = ttk.Frame(self.tab3)
-        frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
-        
-        frame.grid_columnconfigure(0, weight=1)
-        
-        # 输出目录
-        path_frame = ttk.Frame(frame)
-        path_frame.grid(row=0, column=0, sticky="ew", pady=10)
-        
-        path_frame.grid_columnconfigure(1, weight=1)
-        
-        ttk.Label(path_frame, text="输出目录:").grid(row=0, column=0, padx=5)
-        
-        self.path_var = tk.StringVar(value=self.outputPath)
-        path_entry = ttk.Entry(path_frame, textvariable=self.path_var)
-        path_entry.grid(row=0, column=1, sticky="ew", padx=5)
-        
-        # 修改按钮（选择新目录）
-        modify_path_btn = ttk.Button(path_frame, text="修改", command=self.browse_output_path)
-        modify_path_btn.grid(row=0, column=2, padx=5)
-        
-        # 浏览按钮（打开当前输出目录）
-        browse_path_btn = ttk.Button(path_frame, text="浏览", command=self.open_output_path)
-        browse_path_btn.grid(row=0, column=3, padx=5)
-        
-        # 图片分辨率 - 下拉框
-        res_frame = ttk.Frame(frame)
-        res_frame.grid(row=1, column=0, sticky="ew", pady=10)
-        
-        ttk.Label(res_frame, text="图片分辨率:").grid(row=0, column=0, padx=5)
-        
-        self.res_var = tk.StringVar(value="2.7K")
-        res_combobox = ttk.Combobox(res_frame, textvariable=self.res_var, 
-                                   values=["4K", "2.7K", "1080P"], 
-                                   state="readonly", width=10)
-        res_combobox.grid(row=0, column=1, padx=5)
-        res_combobox.bind("<<ComboboxSelected>>", lambda e: self.update_resolution())
-        
-        # 使用裁切
-        self.trim_var = tk.BooleanVar(value=False)
-        self.trim_check = ttk.Checkbutton(frame, text="使用裁切为正方形", variable=self.trim_var,
-                                        command=self.update_trim)
-        self.trim_check.grid(row=2, column=0, sticky="w", padx=10, pady=10)
-        
-        # 质量滑块
-        quality_frame = ttk.Frame(frame)
-        quality_frame.grid(row=3, column=0, sticky="ew", pady=10)
-        
-        quality_frame.grid_columnconfigure(1, weight=1)
-        
-        ttk.Label(quality_frame, text="质量:").grid(row=0, column=0, padx=5)
-        
-        self.quality_var = tk.IntVar(value=92)
-        quality_scale = ttk.Scale(quality_frame, from_=0, to=100, orient=tk.HORIZONTAL,
-                                variable=self.quality_var, command=self.update_quality)
-        quality_scale.grid(row=0, column=1, sticky="ew", padx=5)
-        
-        self.quality_value = ttk.Label(quality_frame, text="92")
-        self.quality_value.grid(row=0, column=2, padx=5)
-        
-        # 初始化分辨率
-        self.update_resolution()
-        
+        self.basic_page = BasicPage(self)
+        self.advanced_page = AdvancedPage(self)
+        
+        self.init_navigation()
+        
+        self.setAcceptDrops(True)
+        
+        self.center_window()
+    
+    def center_window(self):
+        """将窗口居中显示在屏幕上"""
+        screen_geometry = QApplication.primaryScreen().geometry()
+        x = (screen_geometry.width() - self.width()) // 2
+        y = (screen_geometry.height() - self.height()) // 2
+        self.move(x, y)
+    
+    def init_navigation(self):
+        """初始化导航栏"""
+        self.addSubInterface(
+            self.basic_page,
+            FluentIcon.HOME,
+            "基本设置",
+            position=NavigationItemPosition.TOP
+        )
+        
+        self.addSubInterface(
+            self.advanced_page,
+            FluentIcon.SETTING,
+            "高级设置",
+            position=NavigationItemPosition.TOP
+        )
+        
+        self.navigationInterface.setCurrentItem("基本设置")
+    
     def set_param(self, setdirection, setpicNumOfDirection):
+        """设置排列参数"""
         self.direction = setdirection
         self.picNumOfDirection = setpicNumOfDirection
         self.TargetResolutionNum = self.TargetResolution[1]
-
+    
     def browse_files(self):
-        files = filedialog.askopenfilenames(
-            filetypes=[("图片文件", "*.png *.jpg *.jpeg *.bmp *.ico *.tga *.tiff")]
-        )
-        if files:
-            for file in files:
-                self.uploaded_files.append(file)
-            self.update_file_list()
-            
+        """浏览并选择文件"""
+        try:
+            files, _ = QFileDialog.getOpenFileNames(
+                self,
+                "选择图片",
+                "",
+                "图片文件 (*.png *.jpg *.jpeg *.bmp *.ico *.tga *.tiff)"
+            )
+            if files:
+                for file_path in files:
+                    if os.path.exists(file_path) and os.path.isfile(file_path):
+                        self.uploaded_files.append(file_path)
+                    else:
+                        QMessageBox.warning(self, "警告", f"无法访问文件: {file_path}")
+                self.update_file_list()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"选择文件时出错: {str(e)}")
+    
     def clear_files(self):
+        """清除所有已选文件"""
         self.uploaded_files = []
         self.update_file_list()
-        
-        # 立即重置预览和全局滚动区域
-        for widget in self.preview_inner_frame.winfo_children():
-            widget.destroy()
-        
-        # 强制检查两个滚动条
-        self.preview_canvas.configure(scrollregion=(0, 0, 0, 0))
-        self.check_preview_scrollbar()
-        
-        self.tab1_canvas.configure(scrollregion=(0, 0, 0, 0))
-        self.tab1_canvas.yview_moveto(0)  # 重置滚动位置
-        self.check_tab1_scrollbar()
-        
+    
     def update_file_list(self):
-        # 清除现有的预览
-        for widget in self.preview_inner_frame.winfo_children():
-            widget.destroy()
+        """更新文件列表显示"""
+        while self.basic_page.preview_layout.count():
+            item = self.basic_page.preview_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
         
-        # 根据需要排序
         if self.needSort:
             self.uploaded_files = sorted(self.uploaded_files)
         
-        # 更新文件计数
-        self.files_label.config(text=f"已选择{len(self.uploaded_files)}个文件")
+        self.basic_page.files_label.setText(f"已选择{len(self.uploaded_files)}个文件")
         
-        # 如果没有文件，则重置滚动区域并返回
-        if not self.uploaded_files:
-            self.preview_canvas.configure(scrollregion=(0, 0, 0, 0))
-            self.check_preview_scrollbar()
-            self.check_tab1_scrollbar()
-            return
-        
-        # 创建文件预览和控制
         for i, file_path in enumerate(self.uploaded_files):
-            frame = ttk.Frame(self.preview_inner_frame)
-            frame.pack(fill=tk.X, pady=2)  # 依然使用pack布局，因为这是在canvas内部
-            
-            frame.grid_columnconfigure(1, weight=1)
-            
-            # 图片预览
-            try:
-                img = Image.open(file_path)
-                img.thumbnail((80, 80))  # 调整预览大小
-                photo = ImageTk.PhotoImage(img)
-                
-                img_label = ttk.Label(frame, image=photo)
-                img_label.image = photo  # 保持引用以防止垃圾回收
-                img_label.pack(side=tk.LEFT, padx=5)
-            except Exception as e:
-                img_label = ttk.Label(frame, text="无法预览")
-                img_label.pack(side=tk.LEFT, padx=5)
-                
-            # 文件名和控制按钮
-            info_frame = ttk.Frame(frame)
-            info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            
-            ttk.Label(info_frame, text=f"{i+1}. {os.path.basename(file_path)}").pack(anchor=tk.W)
-            
-            # 只有非自动排序时才显示控制按钮
-            if not self.needSort:
-                btn_frame = ttk.Frame(info_frame)
-                btn_frame.pack(fill=tk.X, pady=2)
-                
-                if i > 0:
-                    up_btn = ttk.Button(btn_frame, text="上移", 
-                                      command=lambda idx=i: self.move_file_up(idx))
-                    up_btn.pack(side=tk.LEFT, padx=2)
-                    
-                if i < len(self.uploaded_files) - 1:
-                    down_btn = ttk.Button(btn_frame, text="下移", 
-                                        command=lambda idx=i: self.move_file_down(idx))
-                    down_btn.pack(side=tk.LEFT, padx=2)
-                    
-                delete_btn = ttk.Button(btn_frame, text="删除", 
-                                      command=lambda idx=i: self.delete_file(idx))
-                delete_btn.pack(side=tk.LEFT, padx=2)
-            
-        # 确保画布更新后才检查滚动条
-        self.root.update_idletasks()
+            preview_item = FilePreviewItem(file_path, i, self)
+            preview_item.set_controls_visible(not self.needSort)
+            self.basic_page.preview_layout.addWidget(preview_item)
         
-        # 更新后检查滚动条
-        self.check_preview_scrollbar()
-        # 检查全局滚动条
-        self.check_tab1_scrollbar()
-        
+        if self.uploaded_files:
+            self.basic_page.preview_layout.addStretch(1)
+    
     def move_file_up(self, index):
+        """上移文件"""
         if index > 0:
             self.uploaded_files[index], self.uploaded_files[index-1] = self.uploaded_files[index-1], self.uploaded_files[index]
             self.update_file_list()
-            
+    
     def move_file_down(self, index):
+        """下移文件"""
         if index < len(self.uploaded_files) - 1:
             self.uploaded_files[index], self.uploaded_files[index+1] = self.uploaded_files[index+1], self.uploaded_files[index]
             self.update_file_list()
-            
+    
     def delete_file(self, index):
+        """删除文件"""
         if 0 <= index < len(self.uploaded_files):
             del self.uploaded_files[index]
             self.update_file_list()
-            
+    
     def browse_output_path(self):
-        directory = filedialog.askdirectory()
-        if directory:
-            self.outputPath = directory
-            self.path_var.set(directory)
-            
-    def open_output_path(self):
-        if not os.path.exists(self.outputPath):
-            try:
-                os.makedirs(self.outputPath)
-            except Exception as e:
-                messagebox.showerror("错误", f"无法创建输出目录: {str(e)}")
-                return
-        
-        # 使用系统默认程序打开文件夹
+        """选择输出目录"""
         try:
+            directory = QFileDialog.getExistingDirectory(self, "选择输出目录")
+            if directory:
+                self.outputPath = directory
+                self.basic_page.path_edit.setText(directory)
+                if hasattr(self.advanced_page, 'path_edit'):
+                    self.advanced_page.path_edit.setText(directory)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"选择输出目录时出错: {str(e)}")
+    
+    def open_output_path(self):
+        """打开输出目录"""
+        try:
+            if not os.path.exists(self.outputPath):
+                os.makedirs(self.outputPath)
+            
             import subprocess
             if os.name == 'nt':  # Windows
                 os.startfile(self.outputPath)
@@ -467,318 +603,162 @@ class PicMergeApp:
                 else:  # Linux
                     subprocess.call(['xdg-open', self.outputPath])
         except Exception as e:
-            messagebox.showerror("错误", f"无法打开输出目录: {str(e)}")
-        
+            QMessageBox.critical(self, "错误", f"无法打开输出目录: {str(e)}")
+    
     def update_resolution(self):
-        res = self.res_var.get()
-        if res == "4K":
-            self.TargetResolution = [3840, 2160]
-        elif res == "2.7K":
-            self.TargetResolution = [2560, 1440]
-        elif res == "1080P":
-            self.TargetResolution = [1920, 1080]
-        
-        self.TargetResolutionNum = self.TargetResolution[1]
-        
-    def update_trim(self):
-        self.needTrim = self.trim_var.get()
-        
-    def update_quality(self, event=None):
-        self.quality = self.quality_var.get()
-        self.quality_value.config(text=str(self.quality))
-        
-    def update_progress(self, value, text="处理中"):
-        self.progress["value"] = value
-        self.status_label.config(text=text)
-        self.root.update_idletasks()
-        
-    def generate(self):
-        if not self.uploaded_files:
-            messagebox.showwarning("警告", "请先选择图片文件")
-            return
+        """更新分辨率设置"""
+        try:
+            res = self.advanced_page.res_combo.currentText()
+            if res == "4K":
+                self.TargetResolution = [3840, 2160]
+            elif res == "2.7K":
+                self.TargetResolution = [2560, 1440]
+            elif res == "1080P":
+                self.TargetResolution = [1920, 1080]
             
+            self.TargetResolutionNum = self.TargetResolution[1]
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"更新分辨率设置失败: {str(e)}")
+    
+    def update_trim(self):
+        """更新裁切设置"""
+        self.needTrim = self.advanced_page.trim_check.isChecked()
+    
+    def update_quality(self):
+        """更新质量设置"""
+        self.quality = self.advanced_page.quality_slider.value()
+        self.advanced_page.quality_value_label.setText(str(self.quality))
+    
+    def update_sort(self):
+        """更新排序设置"""
+        self.needSort = self.basic_page.sort_check.isChecked()
+        self.update_file_list()
+    
+    def update_config(self, config):
+        """更新配置设置"""
+        try:
+            if config == "竖直单列":
+                self.set_param("竖直排列", 1)
+                self.basic_page.custom_config.setVisible(False)
+            elif config == "水平单列":
+                self.set_param("水平排列", 1)
+                self.basic_page.custom_config.setVisible(False)
+            elif config == "自定义":
+                self.basic_page.custom_config.setVisible(True)
+                self.update_direction(self.direction)
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"更新配置失败: {str(e)}")
+    
+    def update_direction(self, direction):
+        """更新方向设置"""
+        try:
+            self.direction = direction
+            if direction == "竖直排列":
+                self.basic_page.num_label.setText("排几列:")
+            else:
+                self.basic_page.num_label.setText("排几行:")
+            self.set_param(direction, self.basic_page.num_slider.value())
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"更新方向设置失败: {str(e)}")
+    
+    def update_num(self):
+        """更新数量设置"""
+        try:
+            num = self.basic_page.num_slider.value()
+            self.basic_page.num_value_label.setText(str(num))
+            self.set_param(self.direction, num)
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"更新数量设置失败: {str(e)}")
+    
+    def update_progress(self, value, text="处理中"):
+        """更新进度条"""
+        self.basic_page.progress_bar.setValue(value)
+        self.basic_page.status_label.setText(text)
+    
+    def generate(self):
+        """生成合并图片"""
+        if not self.uploaded_files:
+            QMessageBox.warning(self, "警告", "请先选择图片文件")
+            return
+        
         self.update_progress(0, "准备中...")
         
-        # 确保输出目录存在
         if not os.path.exists(self.outputPath):
             try:
                 os.makedirs(self.outputPath)
             except Exception as e:
-                messagebox.showerror("错误", f"无法创建输出目录: {str(e)}")
+                QMessageBox.critical(self, "错误", f"无法创建输出目录: {str(e)}")
                 return
         
-        # 创建BytesIO对象的列表
         files_bytes = []
         for file_path in self.uploaded_files:
             try:
                 with open(file_path, 'rb') as f:
                     files_bytes.append(BytesIO(f.read()))
             except Exception as e:
-                messagebox.showerror("错误", f"读取文件失败: {file_path}\n{str(e)}")
+                QMessageBox.critical(self, "错误", f"读取文件失败: {file_path}\n{str(e)}")
                 return
         
-        # 创建进度条适配器对象
-        class ProgressBarAdapter:
-            def __init__(self, app):
-                self.app = app
-            
-            def progress(self, value, text="处理中"):
-                self.app.root.after(0, lambda: self.app.update_progress(value, text))
+        self.worker = ProgressBarWorker(
+            files_bytes,
+            self.direction,
+            self.picNumOfDirection,
+            self.TargetResolutionNum,
+            self.outputPath,
+            self.quality,
+            self.needTrim
+        )
         
-        progress_adapter = ProgressBarAdapter(self)
+        self.worker.progress_update.connect(self.update_progress)
+        self.worker.completed.connect(self.show_result)
+        self.worker.error.connect(lambda e: QMessageBox.critical(self, "错误", f"处理失败: {e}"))
         
-        # 在后台线程中运行处理
-        def processing_thread():
-            try:
-                result = core.main(
-                    files_bytes, 
-                    self.direction, 
-                    self.picNumOfDirection,
-                    self.TargetResolutionNum, 
-                    self.outputPath, 
-                    self.quality, 
-                    progress_adapter,  # 使用适配器对象而不是回调函数
-                    self.needTrim
-                )
-                
-                # 处理完成后更新UI
-                self.root.after(0, lambda: self.show_result(result))
-            except Exception as e:
-                self.root.after(0, lambda: messagebox.showerror("错误", f"处理失败: {str(e)}"))
+        self.basic_page.generate_button.setEnabled(False)
         
-        # 启动后台线程
-        threading.Thread(target=processing_thread, daemon=True).start()
+        self.worker.start()
     
     def show_result(self, result):
+        """显示处理结果"""
         self.update_progress(100, "完成")
-        # 移除完成弹框
-        # messagebox.showinfo("完成", result)
-        self.status_label.config(text=result)
-        # 3秒后清除状态
-        self.root.after(3000, lambda: self.update_progress(0, ""))
-
-    def update_sort(self):
-        self.needSort = self.sort_var.get()
-        self.update_file_list()
-
-    def update_config(self):
-        config = self.config_var.get()
-        if config == "竖直单列":
-            self.set_param("竖直排列", 1)
-            self.custom_frame.grid_remove()
-        elif config == "水平单列":
-            self.set_param("水平排列", 1)
-            self.custom_frame.grid_remove()
-        elif config == "自定义":
-            self.custom_frame.grid()
-            self.update_direction()
+        self.basic_page.status_label.setText(result)
+        self.basic_page.generate_button.setEnabled(True)
+        QTimer.singleShot(3000, lambda: self.update_progress(0, ""))
+    
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖拽进入事件"""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+    
+    def dropEvent(self, event: QDropEvent):
+        """拖放事件"""
+        try:
+            mime_data = event.mimeData()
             
-    def update_direction(self):
-        self.direction = self.direction_var.get()
-        if self.direction == "竖直排列":
-            self.num_label.config(text="排几列:")
-        else:
-            self.num_label.config(text="排几行:")
-        self.set_param(self.direction, self.num_var.get())
-        
-    def update_num(self, event=None):
-        num = int(self.num_var.get())
-        self.num_value_label.config(text=str(num))
-        self.set_param(self.direction, num)
-        
-    def toggle_advanced(self):
-        pass  # 不再需要此功能，保留方法以避免错误
-        
-    def update_preview(self):
-        pass  # 已被update_file_list取代
-
-    def drop_files(self, event):
-        # 获取拖放的文件路径
-        data = event.data
-        
-        if isinstance(data, str):
-            # 处理字符串格式的路径
-            if data.startswith('{') and data.endswith('}'):
-                # Windows风格的路径列表 {path1} {path2}
-                paths = []
-                # 移除首尾的大括号
-                data = data[1:-1]
-                # 分割并处理可能带有空格和大括号的路径
-                paths_raw = data.split('} {')
-                for p in paths_raw:
-                    if p.startswith('{'):
-                        p = p[1:]
-                    if p.endswith('}'):
-                        p = p[:-1]
-                    paths.append(p)
-            else:
-                # 单个文件路径或Unix风格的路径列表
-                paths = data.split()
-        else:
-            # 处理列表格式的路径
-            paths = data
-        
-        # 过滤支持的图片文件类型
-        valid_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.ico', '.tga', '.tiff']
-        count = 0
-        
-        for path in paths:
-            path = path.strip('"\'')  # 移除可能的引号
-            ext = os.path.splitext(path)[1].lower()
-            if ext in valid_extensions and os.path.isfile(path):
-                self.uploaded_files.append(path)
-                count += 1
-        
-        if count > 0:
-            self.update_file_list()
-
-    def check_preview_scrollbar(self, event=None):
-        # 更新画布的滚动区域
-        self.preview_canvas.update_idletasks()
-        self.preview_canvas.configure(scrollregion=self.preview_canvas.bbox("all"))
-        
-        # 判断是否需要滚动条
-        preview_height = self.preview_inner_frame.winfo_reqheight()
-        canvas_height = self.preview_canvas.winfo_height()
-        
-        if preview_height <= canvas_height:
-            # 不需要滚动条
-            if self.preview_scrollbar.winfo_ismapped():
-                self.preview_scrollbar.grid_forget()
-        else:
-            # 需要滚动条
-            if not self.preview_scrollbar.winfo_ismapped():
-                self.preview_scrollbar.grid(row=0, column=1, sticky="ns")
-
-    def check_tab1_scrollbar(self, event=None):
-        # 更新画布的滚动区域
-        self.tab1_canvas.update_idletasks()
-        
-        # 获取内容的实际大小
-        bbox = self.tab1_canvas.bbox("all")
-        if not bbox:
-            # 没有内容，不需要滚动条
-            if self.tab1_scrollbar.winfo_ismapped():
-                self.tab1_scrollbar.grid_forget()
-                # 重置滚动位置
-                self.tab1_canvas.yview_moveto(0)
-            self.tab1_canvas.configure(scrollregion=(0, 0, 0, 0))
-            return
-        
-        # 设置滚动区域，多加一点底部间距防止内容紧贴底部
-        self.tab1_canvas.configure(scrollregion=(0, 0, bbox[2], bbox[3] + 10))
-        
-        # 判断是否需要滚动条
-        content_height = bbox[3]
-        canvas_height = self.tab1_canvas.winfo_height()
-        
-        if content_height <= canvas_height:
-            # 不需要滚动条
-            if self.tab1_scrollbar.winfo_ismapped():
-                self.tab1_scrollbar.grid_forget()
-                # 重置滚动位置防止出现空白
-                self.tab1_canvas.yview_moveto(0)
-        else:
-            # 需要滚动条
-            if not self.tab1_scrollbar.winfo_ismapped():
-                self.tab1_scrollbar.grid(row=0, column=1, sticky="ns")
-
-    def on_mousewheel(self, event):
-        # 处理鼠标滚轮事件
-        # 首先检查鼠标是否在预览区域
-        x, y = self.root.winfo_pointerxy()
-        preview_widget = self.preview_canvas.winfo_containing(x, y)
-        
-        # 如果鼠标在预览区域且预览区域需要滚动
-        if preview_widget and self.preview_scrollbar.winfo_ismapped():
-            return self.on_preview_mousewheel(event)
-        
-        # 否则处理全局滚动
-        delta = 0
-        
-        # 统一不同平台的滚动增量
-        if event.num == 4:
-            delta = 120
-        elif event.num == 5:
-            delta = -120
-        else:
-            delta = event.delta
-        
-        # 滚动幅度调整
-        scroll_speed = 1
-        units = int((-1 * delta) / 120 * scroll_speed)
-        
-        # 执行滚动
-        self.tab1_canvas.yview_scroll(units, "units")
-        
-        # 防止事件继续传播
-        return "break"
-
-    def on_preview_mousewheel(self, event):
-        # 获取鼠标位置
-        x, y = self.root.winfo_pointerxy()
-        preview_widget = self.preview_canvas.winfo_containing(x, y)
-        
-        # 如果鼠标在预览区域内且预览滚动条可见
-        if preview_widget and self.preview_scrollbar.winfo_ismapped():
-            delta = 0
-            
-            # 统一不同平台的滚动增量
-            if event.num == 4:
-                delta = 120
-            elif event.num == 5:
-                delta = -120
-            else:
-                delta = event.delta
+            if mime_data.hasUrls():
+                urls = mime_data.urls()
+                valid_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.ico', '.tga', '.tiff']
+                count = 0
                 
-            # 滚动幅度调整
-            scroll_speed = 1
-            units = int((-1 * delta) / 120 * scroll_speed)
-            
-            # 执行滚动
-            self.preview_canvas.yview_scroll(units, "units")
-            
-            # 防止事件继续传播
-            return "break"
-        else:
-            # 如果不在预览区域或预览不需要滚动，交给全局滚动处理
-            return self.on_mousewheel(event)
+                for url in urls:
+                    if url.isLocalFile():
+                        file_path = url.toLocalFile()
+                        ext = os.path.splitext(file_path)[1].lower()
+                        if ext in valid_extensions and os.path.isfile(file_path):
+                            self.uploaded_files.append(file_path)
+                            count += 1
+                
+                if count > 0:
+                    self.update_file_list()
+                    event.acceptProposedAction()
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"处理拖放文件时出错: {str(e)}")
 
-    def _bind_mousewheel_to_children(self, widget):
-        # 递归绑定鼠标滚轮事件到所有子控件
-        for child in widget.winfo_children():
-            # 预览区域单独处理，它有自己的滚动事件
-            if child == self.preview_frame or child == self.preview_canvas:
-                continue
-            
-            child.bind("<MouseWheel>", self.on_mousewheel)
-            child.bind("<Button-4>", self.on_mousewheel)
-            child.bind("<Button-5>", self.on_mousewheel)
-            self._bind_mousewheel_to_children(child)
 
-    # 添加窗口大小变化处理方法
-    def on_window_resize(self, event):
-        # 只对整个窗口大小变化做响应，忽略子控件事件
-        if event.widget == self.root:
-            # 延迟检查滚动条，确保界面已重绘
-            self.root.after(50, self.check_tab1_scrollbar)
-            self.root.after(50, self.check_preview_scrollbar)
-
-if __name__ == "__main__":
-    # 设置DPI感知以防止文字模糊
-    try:
-        from ctypes import windll
-        # windll.shcore.SetProcessDpiAwareness(1)
-    except:
-        pass  # 如果不是Windows或缺少DPI API，就忽略
-        
-    # 使用TkinterDnD.Tk代替tk.Tk以支持拖放
-    if DND_FILES:
-        root = TkinterDnD.Tk()
-    else:
-        root = tk.Tk()
-        
-    # 强制底部框架总是可见
-    root.minsize(600, 400)  # 设置最小窗口大小
-    app = PicMergeApp(root)
-    root.mainloop() 
+if __name__ == '__main__':
+    QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    
+    app = QApplication(sys.argv)
+    
+    window = PicMergeApp()
+    window.show()
+    sys.exit(app.exec()) 
