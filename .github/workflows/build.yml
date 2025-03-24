@@ -10,7 +10,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: 设置 Python
         uses: actions/setup-python@v4
@@ -25,23 +25,23 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --windows-icon-from-ico=icon.ico --include-package=core --output-dir=dist GUI_QT.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
       
-      - name: 打包应用
+      - name: 重命名可执行文件
         run: |
           cd dist
-          powershell Compress-Archive -Path GUI_QT.dist -DestinationPath PicMerge-Windows.zip
+          Rename-Item -Path "GUI.exe" -NewName "PicMerge-Windows.exe"
       
       - name: 上传构建产物
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: dist/PicMerge-Windows.zip
+          path: dist/PicMerge-Windows.exe
 
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: 设置 Python
         uses: actions/setup-python@v4
@@ -54,17 +54,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
+      - name: 安装 C 编译器缓存
+        run: |
+          brew install ccache
+      
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI_QT.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
       
-      - name: 打包应用
+      - name: 重命名应用
         run: |
           cd dist
-          zip -r PicMerge-macOS.zip GUI_QT.dist
+          mv GUI.app PicMerge.app
+          zip -r PicMerge-macOS.zip PicMerge.app
       
       - name: 上传构建产物
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: dist/PicMerge-macOS.zip
@@ -72,7 +77,7 @@ jobs:
   build-ubuntu:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
       - name: 设置 Python
         uses: actions/setup-python@v4
@@ -83,46 +88,66 @@ jobs:
       - name: 安装依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-glx libegl1-mesa libxrandr2 libxrandr2 libxss1 libxcursor1 libxcomposite1 libasound2 libxi6 libxtst6
+          sudo apt-get install -y libgl1 libegl1 libxrandr2 libxss1 libxcursor1 libxcomposite1 libxi6 libxtst6 libasound2-dev
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI_QT.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
       
-      - name: 打包应用
+      - name: 重命名可执行文件
         run: |
           cd dist
-          zip -r PicMerge-Linux.zip GUI_QT.dist
+          mv GUI.bin PicMerge-Linux
+          chmod +x PicMerge-Linux
       
       - name: 上传构建产物
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: dist/PicMerge-Linux.zip
+          path: dist/PicMerge-Linux
 
   create-release:
     needs: [build-windows, build-macos, build-ubuntu]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       
-      - name: 下载所有构建产物
-        uses: actions/download-artifact@v3
+      - name: 下载 Windows 构建产物
+        uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: windows-build
+          path: artifacts/windows-build
+      
+      - name: 下载 macOS 构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: artifacts/macos-build
+      
+      - name: 下载 Linux 构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+          path: artifacts/linux-build
+      
+      - name: 查看文件结构
+        run: find artifacts -type f | sort
       
       - name: 创建 Pre-release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            artifacts/windows-build/PicMerge-Windows.zip
+            artifacts/windows-build/PicMerge-Windows.exe
             artifacts/macos-build/PicMerge-macOS.zip
-            artifacts/linux-build/PicMerge-Linux.zip
+            artifacts/linux-build/PicMerge-Linux
           prerelease: true
           generate_release_notes: true
           name: PicMerge 预发布 ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
+          draft: false  # 确保直接发布而非草稿
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
