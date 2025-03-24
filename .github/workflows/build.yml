@@ -33,7 +33,7 @@ jobs:
 
       - name: 构建 Windows 可执行文件
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core;core" --upx-dir="./" GUI.py
+          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core;core" --upx-dir="./" --exclude-module=PyQt5 GUI.py
 
       - name: 上传 Windows 构建产物
         uses: actions/upload-artifact@v4
@@ -63,7 +63,7 @@ jobs:
 
       - name: 构建 macOS 应用包
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core:core" --upx-dir="/usr/local/bin" GUI.py
+          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core:core" --upx-dir="/usr/local/bin" --exclude-module=PyQt5 GUI.py
 
       - name: 打包应用
         run: |
