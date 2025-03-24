@@ -23,7 +23,11 @@ Python 3.7
 - 支持从EXIF中读取旋转信息进行旋转
 - 支持裁切成正方形后拼图
 
-## 界面截图
+## 界面截图（PySide6版）
+
+![image-20250324144457508](readme.picture/image-20250324144457508.png)
+
+## 界面截图（WebGUI版）
 
 ![image-20240316143732812](readme.picture/image-20240316143732812.png)
 
