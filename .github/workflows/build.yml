@@ -54,6 +54,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
++     - name: 安装 C 编译器缓存
++       run: brew install ccache
+      
       - name: 使用 Nuitka 构建
         run: |
           python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --include-package=core --output-dir=dist GUI.py
@@ -89,7 +92,7 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI_QT.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist GUI.py
       
       - name: 打包应用
         run: |
@@ -141,4 +144,4 @@ jobs:
           name: PicMerge 预发布 ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
