@@ -25,7 +25,7 @@ jobs:
       
       - name: 使用 Nuitka 构建
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --include-package=core --output-dir=dist GUI.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --include-package=core --output-dir=dist GUI.py --assume-yes-for-downloads
       
       - name: 打包应用
         run: |
