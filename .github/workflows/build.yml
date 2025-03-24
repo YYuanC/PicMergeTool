@@ -112,7 +112,8 @@ jobs:
           path: dist/PicMerge-Linux
 
   create-release:
-    needs: [build-windows, build-macos, build-linux]
+    # needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows] 
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -129,8 +130,8 @@ jobs:
         with:
           files: |
             artifacts/windows-build/PicMerge.exe
-            artifacts/macos-build/PicMerge-macOS.zip
-            artifacts/linux-build/PicMerge-Linux
+#            artifacts/macos-build/PicMerge-macOS.zip
+#            artifacts/linux-build/PicMerge-Linux
           prerelease: true
           generate_release_notes: true
           tag_name: preview
