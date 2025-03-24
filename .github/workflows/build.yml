@@ -24,8 +24,16 @@ jobs:
           pip install -r requirements.txt
       
       - name: 使用 Nuitka 构建
-        run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --disable-console --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: GUI.py
+          enable-plugin: pyside6
+          include-package: core
+          disable-console: true
+          onefile: true
+          standalone: true
+          output-dir: dist
       
       - name: 重命名可执行文件
         run: |
@@ -59,8 +67,16 @@ jobs:
           brew install ccache
       
       - name: 使用 Nuitka 构建
-        run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
+        uses: Nuitka/Nuitka-Action@main 
+        with:
+          nuitka-version: main
+          script-name: GUI.py
+          enable-plugin: pyside6
+          include-package: core
+          macos-create-app-bundle: true
+          onefile: true
+          standalone: true
+          output-dir: dist
       
       - name: 重命名应用
         run: |
@@ -93,8 +109,15 @@ jobs:
           pip install -r requirements.txt
       
       - name: 使用 Nuitka 构建
-        run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist --onefile GUI.py --assume-yes-for-downloads
+        uses: Nuitka/Nuitka-Action@main
+        with:
+          nuitka-version: main
+          script-name: GUI.py 
+          enable-plugin: pyside6
+          include-package: core
+          onefile: true
+          standalone: true
+          output-dir: dist
       
       - name: 重命名可执行文件
         run: |
