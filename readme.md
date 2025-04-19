@@ -1,33 +1,36 @@
 # PicMergeTool
 
-一个简单易用的基于Streamlit和PIL的拼图软件。
+一个简单易用的基于PySide6/Streamlit和PIL的拼图软件。
 
-允许用户输入多张图片进行拼接，生成一张新的图片。
+允许用户输入多张图片进行拼接。
+
+## Feature
+
+- 兼容广泛。支持 .png, .jpg, .jpeg, .bmp, .ico, .tga, .tiff
+- 支持 水平 和 竖直 排列，允许自定义列数/行数
+- 从EXIF中读取旋转信息进行旋转
+- 裁切为正方形后拼图
+- 在图片之间添加间隔
+- 拖拽/从剪贴板粘贴
 
 ## 运行环境
 
 Python 3.7
 
-## 使用方法
+## 使用
 
-1. 下载Release
-2. 安装依赖`pip install requirements.txt`
-3. 运行`streamlit run .\webGUI.py`
+- 使用PySide6界面
+  - 下载Release中的与编译版本 或从源码运行
+- 使用Streamlit界面
+  - 安装依赖`pip install requirements.txt`
+  - 运行`streamlit run .\webGUI.py`
 
-## Feature
 
-- 兼容广泛。支持 .png, .jpg, .jpeg, .bmp, .ico, .tga, .tiff
-- 支持 水平 和 竖直 排列
-- 支持自定义列数/行数
-- 支持预设/自定义分辨率
-- 支持从EXIF中读取旋转信息进行旋转
-- 支持裁切成正方形后拼图
-
-## 界面截图（PySide6版）
+## 界面截图（PySide6）
 
 ![image-20250324144457508](readme.picture/image-20250324144457508.png)
 
-## 界面截图（WebGUI版）
+## 界面截图（Streamlit）
 
 ![image-20240316143732812](readme.picture/image-20240316143732812.png)
 
