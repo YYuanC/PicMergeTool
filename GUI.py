@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QSize, Signal, QThread, QMimeData, QUrl, QEvent, 
 from PySide6.QtWidgets import (QApplication, QWidget, QLabel, QVBoxLayout, 
                               QHBoxLayout, QFileDialog, QMessageBox, 
                               QButtonGroup, QFrame)
-from PySide6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QColor
+from PySide6.QtGui import QPixmap, QDragEnterEvent, QDropEvent, QColor, QKeySequence, QClipboard, QImage, QKeyEvent
 
 from qfluentwidgets import (FluentWindow, NavigationInterface, NavigationItemPosition, 
                            ScrollArea, FluentIcon, setTheme, Theme, PrimaryPushButton, 
@@ -480,6 +480,9 @@ class PicMergeApp(FluentWindow):
         
         self.setAcceptDrops(True)
         
+        # 安装事件过滤器以捕获键盘事件
+        self.installEventFilter(self)
+        
         self.center_window()
     
     def center_window(self):
@@ -759,6 +762,66 @@ class PicMergeApp(FluentWindow):
         except Exception as e:
             QMessageBox.warning(self, "警告", f"处理拖放文件时出错: {str(e)}")
 
+
+    def eventFilter(self, obj, event):
+        """事件过滤器，用于捕获键盘事件"""
+        if event.type() == QEvent.KeyPress:
+            key_event = event
+            # 检测Ctrl+V组合键
+            if key_event.key() == Qt.Key_V and key_event.modifiers() == Qt.ControlModifier:
+                self.paste_from_clipboard()
+                return True
+        return super().eventFilter(obj, event)
+    
+    def paste_from_clipboard(self):
+        """从剪贴板粘贴图片"""
+        try:
+            clipboard = QApplication.clipboard()
+            mime_data = clipboard.mimeData()
+            
+            # 检查剪贴板是否包含图片
+            if mime_data.hasImage():
+                image = clipboard.image()
+                if not image.isNull():
+                    # 创建临时文件保存图片
+                    script_dir = os.path.dirname(os.path.abspath(__file__))
+                    temp_dir = os.path.join(script_dir, "Temp")
+                    if not os.path.exists(temp_dir):
+                        os.makedirs(temp_dir)
+                    
+                    # 生成唯一文件名
+                    import time
+                    temp_file = os.path.join(temp_dir, f"clipboard_{int(time.time())}.png")
+                    
+                    # 保存图片
+                    image.save(temp_file, "PNG")
+                    
+                    # 添加到文件列表
+                    self.uploaded_files.append(temp_file)
+                    self.update_file_list()
+                    return
+            
+            # 检查剪贴板是否包含文件URL
+            if mime_data.hasUrls():
+                urls = mime_data.urls()
+                valid_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.ico', '.tga', '.tiff']
+                count = 0
+                
+                for url in urls:
+                    if url.isLocalFile():
+                        file_path = url.toLocalFile()
+                        ext = os.path.splitext(file_path)[1].lower()
+                        if ext in valid_extensions and os.path.isfile(file_path):
+                            self.uploaded_files.append(file_path)
+                            count += 1
+                
+                if count > 0:
+                    self.update_file_list()
+                    return
+            
+            QMessageBox.information(self, "提示", "粘贴失败，剪贴板中没有可用的图片数据")
+        except Exception as e:
+            QMessageBox.warning(self, "警告", f"粘贴图片时出错: {str(e)}")
 
 if __name__ == '__main__':
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)

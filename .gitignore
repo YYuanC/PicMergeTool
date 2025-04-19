@@ -3,3 +3,7 @@
 /.idea/
 /test/
 /test.py
+/*Temp/
+*.pyc
+*.pyo
+*.pyd
