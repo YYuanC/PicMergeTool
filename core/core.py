@@ -67,83 +67,108 @@ def paste(_from, _to, box: Box):
 
 
 # 文件名水平排列
-def mergeHorizon(progressBar,needTrim, allFiles: List, rows: int = 1, height: int = 512):
-  imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
-  total = len(imgs)
-  cols = math.ceil(total / rows)
-  base = geneJpg((1, 1))
-  corner = [0, 0]
-  for row in range(rows):
-    corner[0] = 0
-    corner[1] = height * row
-    for col in range(cols):
-      i = row * cols + col
-      processPrinter(i, total,progressBar)
-      if i >= total:
-        return base
-      im = imgs[i]
-      w, h = im.size
-      newSize = (math.ceil(w * height / h), height)
-      resizedIm = im.resize(newSize, Image.LANCZOS)
-      newBox = (corner[0], corner[1], corner[0] + newSize[0], corner[1] + newSize[1])
-      base = paste(resizedIm, base, newBox)
-      corner[0] += newSize[0]
-  return base
-
-# 文件名竖直排列
-def mergeVertical(progressBar, needTrim, allFiles: List[str], cols: int = 1, width: int = 512):
-  imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
-  total = len(imgs)
-  rows = math.ceil(total / cols)
-  base = geneJpg((1, 1))
-  corner = [0, 0]
-  for col in range(cols):
-    corner[0] = width * col
-    corner[1] = 0
+def mergeHorizon(progressBar, needTrim, allFiles: List, rows: int = 1, height: int = 512, 
+                 needGap=False, gapColor=(255,255,255), gapWidth=10):
+    imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
+    total = len(imgs)
+    cols = math.ceil(total / rows)
+    base = geneJpg((1, 1))
+    corner = [0, 0]
+    
     for row in range(rows):
-      i = col * rows + row
-      processPrinter(i, total, progressBar)
-      if i >= total:
-        return base
-      im = imgs[i]
-      w, h = im.size
-      newSize = (width, math.ceil(h * width / w))
-      resizedIm = im.resize(newSize, Image.LANCZOS)
-      newBox = (corner[0], corner[1], corner[0] + newSize[0], corner[1] + newSize[1])
-      base = paste(resizedIm, base, newBox)
-      corner[1] += newSize[1]
-  return base
+        corner[0] = 0
+        corner[1] = height * row + (row * gapWidth if needGap and row > 0 else 0)
+        for col in range(cols):
+            i = row * cols + col
+            processPrinter(i, total,progressBar)
+            if i >= total:
+                return base
+            im = imgs[i]
+            w, h = im.size
+            newSize = (math.ceil(w * height / h), height)
+            resizedIm = im.resize(newSize, Image.LANCZOS)
+            # 添加水平间隙
+            if needGap and col > 0:
+                corner[0] += gapWidth
+            newBox = (corner[0], corner[1], corner[0] + newSize[0], corner[1] + newSize[1])
+            base = paste(resizedIm, base, newBox)
+            corner[0] += newSize[0]
+    return base
 
-def main(allFiles,direction,picNumOfDirection,TargetResolutionNum,outputPath, quality, progressBar,needTrim):
-  
-  try:
-    resultName = "图片拼接--%s--%s" % (time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()), random.randint(1, 10000))
-    result = Base(outputPath).childOf("%s.jpg" % resultName)
-    result.parent.createAsDir()
-    if(direction == "水平排列"):
-      mergeHorizon(
-        progressBar,
-        needTrim,
-        allFiles,
-        picNumOfDirection,
-        TargetResolutionNum
-      ).save(result.path, optimize=True, quality=quality, progressive=True, subsampling=1)
-    else:
-      mergeVertical(
-        progressBar,
-        needTrim,
-        allFiles,
-        picNumOfDirection,
-        TargetResolutionNum
-      ).save(result.path, optimize=True, quality=quality, progressive=True, subsampling=1)
+def mergeVertical(progressBar, needTrim, allFiles: List[str], cols: int = 1, width: int = 512,
+                  needGap=False, gapColor=(255,255,255), gapWidth=10):
+    imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
+    total = len(imgs)
+    rows = math.ceil(total / cols)
+    base = geneJpg((1, 1))
+    corner = [0, 0]
+    
+    for col in range(cols):
+        corner[0] = width * col + (col * gapWidth if needGap and col > 0 else 0)
+        corner[1] = 0
+        for row in range(rows):
+            i = col * rows + row
+            processPrinter(i, total, progressBar)
+            if i >= total:
+                return base
+            im = imgs[i]
+            w, h = im.size
+            newSize = (width, math.ceil(h * width / w))
+            resizedIm = im.resize(newSize, Image.LANCZOS)
+            # 添加垂直间隙
+            if needGap and row > 0:
+                corner[1] += gapWidth
+            newBox = (corner[0], corner[1], corner[0] + newSize[0], corner[1] + newSize[1])
+            base = paste(resizedIm, base, newBox)
+            corner[1] += newSize[1]
+    return base
 
-    return "图片已保存到 【%s】" % result.path
-  except Exception as e:
-    print("【图片生成失败】", e)
+def main(allFiles, direction, picNumOfDirection, TargetResolutionNum, outputPath, quality, 
+         progressBar, needTrim, needGap=False, gapColor=(255,255,255), gapWidth=10):
     try:
-      pathlib.Path.unlink(result.path)
-      return "【生成的无效图片已被删除】%s" % result.path
+        resultName = "图片拼接--%s--%s" % (time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()), random.randint(1, 10000))
+        result = Base(outputPath).childOf("%s.jpg" % resultName)
+        result.parent.createAsDir()
+        
+        # 修改背景颜色
+        global geneJpg
+        original_geneJpg = geneJpg
+        geneJpg = lambda size: Image.new("RGB", size, gapColor)
+        
+        if(direction == "水平排列"):
+            merged = mergeHorizon(
+                progressBar,
+                needTrim,
+                allFiles,
+                picNumOfDirection,
+                TargetResolutionNum,
+                needGap,
+                gapColor,
+                gapWidth
+            )
+        else:
+            merged = mergeVertical(
+                progressBar,
+                needTrim,
+                allFiles,
+                picNumOfDirection,
+                TargetResolutionNum,
+                needGap,
+                gapColor,
+                gapWidth
+            )
+        
+        # 恢复原始的geneJpg函数
+        geneJpg = original_geneJpg
+        
+        merged.save(result.path, optimize=True, quality=quality, progressive=True, subsampling=1)
+        return "图片已保存到 【%s】" % result.path
     except Exception as e:
-      return "【生成的无效图片删除失败, 请手动删除】%s" % result.path
+        print("【图片生成失败】", e)
+        try:
+            pathlib.Path.unlink(result.path)
+            return "【生成的无效图片已被删除】%s" % result.path
+        except Exception as e:
+            return "【生成的无效图片删除失败, 请手动删除】%s" % result.path
 
 

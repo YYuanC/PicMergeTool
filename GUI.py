@@ -25,7 +25,8 @@ class ProgressBarWorker(QThread):
     error = Signal(str)
 
     def __init__(self, files_bytes, direction, pic_num, target_resolution, 
-                 output_path, quality, need_trim):
+                 output_path, quality, need_trim, need_gap=False, 
+                 gap_color=(255,255,255), gap_width=10):
         super().__init__()
         self.files_bytes = files_bytes
         self.direction = direction
@@ -34,7 +35,10 @@ class ProgressBarWorker(QThread):
         self.output_path = output_path
         self.quality = quality
         self.need_trim = need_trim
-
+        self.need_gap = need_gap
+        self.gap_color = gap_color
+        self.gap_width = gap_width
+    
     def run(self):
         try:
             class ProgressBarAdapter:
@@ -55,7 +59,10 @@ class ProgressBarWorker(QThread):
                 self.output_path,
                 self.quality,
                 progress_adapter,
-                self.need_trim
+                self.need_trim,
+                self.need_gap,
+                self.gap_color,
+                self.gap_width
             )
             
             self.completed.emit(result)
@@ -168,7 +175,7 @@ class FilePreviewItem(CardWidget):
                     btn.setFixedWidth(btn_width)
                     self.move_layout.addWidget(btn)
             
-            # 删除按钮到
+            # 删除按钮
             delete_btn = PushButton("删除")
             delete_btn.setFixedHeight(btn_height)
             delete_btn.setFixedWidth(btn_width)
@@ -197,7 +204,7 @@ class BasicPage(ScrollArea):
         self.vBoxLayout.setSpacing(20)
         self.vBoxLayout.setContentsMargins(20, 20, 20, 20)
         
-        self.title = TitleLabel("图片合并工具")
+        self.title = TitleLabel("图片合并")
         self.title.setObjectName("Title")
         self.vBoxLayout.addWidget(self.title)
         
@@ -239,8 +246,8 @@ class BasicPage(ScrollArea):
         
         btn_layout = QHBoxLayout()
         
-        self.sort_check = CheckBox("自动排序")
-        self.sort_check.setChecked(True)
+        self.sort_check = CheckBox("手动排序")
+        self.sort_check.setChecked(False)
         self.sort_check.clicked.connect(self.parent_app.update_sort)
         btn_layout.addWidget(self.sort_check)
         
@@ -310,16 +317,19 @@ class BasicPage(ScrollArea):
         num_layout = QHBoxLayout()
         self.num_label = BodyLabel("排几列:")
         num_layout.addWidget(self.num_label)
-        
+
         self.num_slider = Slider(Qt.Horizontal)
         self.num_slider.setRange(1, 9)
         self.num_slider.setValue(2)
+        self.num_slider.setFixedWidth(300)
         self.num_slider.valueChanged.connect(self.parent_app.update_num)
-        num_layout.addWidget(self.num_slider, 1)
-        
+        num_layout.addWidget(self.num_slider)
+
         self.num_value_label = BodyLabel("2")
         num_layout.addWidget(self.num_value_label)
-        
+
+        num_layout.addStretch(1)  # 添加弹性空间推动所有元素靠左
+
         custom_config_layout.addLayout(num_layout)
         
         # 默认隐藏自定义配置
@@ -419,7 +429,7 @@ class AdvancedPage(ScrollArea):
         res_layout.addWidget(BodyLabel("目标分辨率:"))
         
         self.res_combo = ComboBox()
-        self.res_combo.addItems(["4K", "2.7K", "1080P"])
+        self.res_combo.addItems(["8K", "4K", "2.7K", "1080P"])
         self.res_combo.setCurrentText("2.7K")
         self.res_combo.currentTextChanged.connect(self.parent_app.update_resolution)
         res_layout.addWidget(self.res_combo)
@@ -427,12 +437,7 @@ class AdvancedPage(ScrollArea):
         
         settings_layout.addLayout(res_layout)
         
-        # 使用裁切选项
-        self.trim_check = CheckBox("使用裁切为正方形")
-        self.trim_check.clicked.connect(self.parent_app.update_trim)
-        settings_layout.addWidget(self.trim_check)
-        
-        # 质量滑块
+        # 质量滑块后添加分隔线
         quality_layout = QHBoxLayout()
         quality_layout.addWidget(BodyLabel("质量:"))
         
@@ -447,6 +452,50 @@ class AdvancedPage(ScrollArea):
         
         settings_layout.addLayout(quality_layout)
         
+        # 添加分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        settings_layout.addWidget(separator)
+        
+        # 使用裁切选项
+        self.trim_check = CheckBox("使用裁切为正方形")
+        self.trim_check.clicked.connect(self.parent_app.update_trim)
+        settings_layout.addWidget(self.trim_check)
+        
+        # 间隔设置
+        gap_layout = QHBoxLayout()
+        self.gap_check = CheckBox("添加间隔")
+        self.gap_check.clicked.connect(self.parent_app.update_gap)
+        gap_layout.addWidget(self.gap_check)
+        
+        # 间隔颜色选择
+        self.gap_color_combo = ComboBox()
+        self.gap_color_combo.addItems(["白边", "黑边"])
+        self.gap_color_combo.setCurrentText("白边")
+        self.gap_color_combo.setEnabled(False)
+        self.gap_color_combo.currentTextChanged.connect(self.parent_app.update_gap_color)
+        gap_layout.addWidget(self.gap_color_combo)
+        
+        gap_layout.addStretch(1)
+        settings_layout.addLayout(gap_layout)
+        
+        # 间隔宽度滑块
+        gap_width_layout = QHBoxLayout()
+        gap_width_layout.addWidget(BodyLabel("间隔宽度:"))
+        
+        self.gap_width_slider = Slider(Qt.Horizontal)
+        self.gap_width_slider.setRange(0, 50)  # 设置范围为0到50
+        self.gap_width_slider.setValue(0)  # 默认值设置为0
+        self.gap_width_slider.setEnabled(False)  # 初始禁用
+        self.gap_width_slider.valueChanged.connect(self.parent_app.update_gap_width)
+        gap_width_layout.addWidget(self.gap_width_slider, 1)
+        
+        self.gap_width_value_label = BodyLabel("0")  # 初始显示为0
+        gap_width_layout.addWidget(self.gap_width_value_label)
+        
+        settings_layout.addLayout(gap_width_layout)
+        
         self.vBoxLayout.addWidget(settings_card)
         
         # 添加弹性空间
@@ -454,6 +503,7 @@ class AdvancedPage(ScrollArea):
 
 
 class PicMergeApp(FluentWindow):
+    """主应用程序窗口"""
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PicMerge")
@@ -472,6 +522,13 @@ class PicMergeApp(FluentWindow):
         self.quality = 92
         self.uploaded_files = []
         self.needSort = True
+        self.needGap = False        # 添加间隔属性初始化
+        self.gapColor = (255, 255, 255)  # 添加间隔颜色属性初始化（默认白色）
+        self.gapWidth = 10         # 添加间隔宽度属性初始化
+        
+        # 设置临时目录路径
+        self.script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.temp_dir = os.path.join(self.script_dir, "temp")
         
         self.basic_page = BasicPage(self)
         self.advanced_page = AdvancedPage(self)
@@ -618,7 +675,9 @@ class PicMergeApp(FluentWindow):
         """更新分辨率设置"""
         try:
             res = self.advanced_page.res_combo.currentText()
-            if res == "4K":
+            if res == "8K":
+                self.TargetResolution = [7680, 4320]
+            elif res == "4K":
                 self.TargetResolution = [3840, 2160]
             elif res == "2.7K":
                 self.TargetResolution = [2560, 1440]
@@ -640,7 +699,7 @@ class PicMergeApp(FluentWindow):
     
     def update_sort(self):
         """更新排序设置"""
-        self.needSort = self.basic_page.sort_check.isChecked()
+        self.needSort = not self.basic_page.sort_check.isChecked()
         self.update_file_list()
     
     def update_config(self, config):
@@ -684,6 +743,34 @@ class PicMergeApp(FluentWindow):
         self.basic_page.progress_bar.setValue(value)
         self.basic_page.status_label.setText(text)
     
+    def update_gap(self):
+        """更新间隔设置"""
+        self.needGap = self.advanced_page.gap_check.isChecked()
+        # 同时更新颜色选择和宽度滑块的启用状态
+        self.advanced_page.gap_color_combo.setEnabled(self.needGap)
+        self.advanced_page.gap_width_slider.setEnabled(self.needGap)
+        self.advanced_page.gap_width_value_label.setEnabled(self.needGap)
+        
+        # 设置滑动条禁用状态的样式
+        if not self.needGap:
+            self.advanced_page.gap_width_slider.setProperty('disabled', True)
+        else:
+            self.advanced_page.gap_width_slider.setProperty('disabled', False)
+        
+        # 强制更新样式
+        self.advanced_page.gap_width_slider.style().unpolish(self.advanced_page.gap_width_slider)
+        self.advanced_page.gap_width_slider.style().polish(self.advanced_page.gap_width_slider)
+    
+    def update_gap_color(self):
+        """更新间隙颜色"""
+        color = self.advanced_page.gap_color_combo.currentText()
+        self.gapColor = (255, 255, 255) if color == "白边" else (0, 0, 0)
+    
+    def update_gap_width(self):
+        """更新间隙宽度"""
+        self.gapWidth = self.advanced_page.gap_width_slider.value()
+        self.advanced_page.gap_width_value_label.setText(str(self.gapWidth))
+    
     def generate(self):
         """生成合并图片"""
         if not self.uploaded_files:
@@ -715,7 +802,10 @@ class PicMergeApp(FluentWindow):
             self.TargetResolutionNum,
             self.outputPath,
             self.quality,
-            self.needTrim
+            self.needTrim,
+            self.needGap, 
+            self.gapColor,
+            self.gapWidth 
         )
         
         self.worker.progress_update.connect(self.update_progress)
@@ -784,14 +874,12 @@ class PicMergeApp(FluentWindow):
                 image = clipboard.image()
                 if not image.isNull():
                     # 创建临时文件保存图片
-                    script_dir = os.path.dirname(os.path.abspath(__file__))
-                    temp_dir = os.path.join(script_dir, "Temp")
-                    if not os.path.exists(temp_dir):
-                        os.makedirs(temp_dir)
+                    if not os.path.exists(self.temp_dir):
+                        os.makedirs(self.temp_dir)
                     
                     # 生成唯一文件名
                     import time
-                    temp_file = os.path.join(temp_dir, f"clipboard_{int(time.time())}.png")
+                    temp_file = os.path.join(self.temp_dir, f"clipboard_{int(time.time())}.png")
                     
                     # 保存图片
                     image.save(temp_file, "PNG")
@@ -822,6 +910,32 @@ class PicMergeApp(FluentWindow):
             QMessageBox.information(self, "提示", "粘贴失败，剪贴板中没有可用的图片数据")
         except Exception as e:
             QMessageBox.warning(self, "警告", f"粘贴图片时出错: {str(e)}")
+
+    def cleanup_temp_directory(self):
+        """清理剪贴板创建的临时目录"""
+        try:
+            if os.path.exists(self.temp_dir):
+                # 删除目录中的所有文件
+                for file_name in os.listdir(self.temp_dir):
+                    file_path = os.path.join(self.temp_dir, file_name)
+                    try:
+                        if os.path.isfile(file_path):
+                            os.unlink(file_path)
+                    except Exception as e:
+                        print(f"删除临时文件失败: {file_path}, 错误: {e}")
+                
+                # 删除空目录
+                try:
+                    os.rmdir(self.temp_dir)
+                except Exception as e:
+                    print(f"删除临时目录失败: {self.temp_dir}, 错误: {e}")
+        except Exception as e:
+            print(f"清理临时目录时出错: {e}")
+
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        self.cleanup_temp_directory()
+        super().closeEvent(event)
 
 if __name__ == '__main__':
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
