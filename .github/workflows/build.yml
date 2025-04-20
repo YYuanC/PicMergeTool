@@ -1,138 +1,211 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 设置 Python
+      # Set up Python 3.11 with pip caching
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          architecture: 'x64'
+          python-version: '3.11'
           cache: 'pip'
 
-      - name: 安装依赖
-        run: |
-          pip install -r requirements.txt
-          pip install pyside6 nuitka
+      # Cache Nuitka build artifacts to speed up builds
+      - name: Cache Nuitka artifacts
+        uses: actions/cache@v3
+        with:
+          path: ~/AppData/Local/Nuitka
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-nuitka-
 
-      - name: 安装构建工具
+      # Install all dependencies
+      - name: Install dependencies
         run: |
-          pip install ordered-set zstandard
-          choco install -y ccache
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyside6 nuitka
 
-      - name: 构建 Windows 可执行文件
+      # Download and set up Dependency Walker for Nuitka on Windows
+      - name: Setup Dependency Walker
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --windows-disable-console --output-dir=dist --output-filename=PicMerge.exe GUI.py
+          $dependsDir = "C:\Users\runneradmin\AppData\Local\Nuitka\Nuitka\Cache\downloads\depends\x86_64"
+          if (-Not (Test-Path -Path "$dependsDir\depends.exe")) {
+            New-Item -ItemType Directory -Force -Path $dependsDir
+            Invoke-WebRequest -Uri "https://dependencywalker.com/depends22_x64.zip" -OutFile "depends.zip"
+            Expand-Archive -Path "depends.zip" -DestinationPath $dependsDir -Force
+          }
 
-      - name: 上传 Windows 构建产物
+      # Build single-file executable with Nuitka
+      - name: Build executable
+        run: |
+          python -m nuitka --onefile --enable-plugin=pyside6 --windows-disable-console --output-dir=dist --output-filename=PicMerge-Windows.exe GUI.py
+
+      # Upload Windows artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-build
-          path: dist/PicMerge.exe
+          name: PicMerge-Windows
+          path: dist/PicMerge-Windows.exe
+          retention-days: 7
+          if-no-files-found: error
 
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 设置 Python
+      # Set up Python 3.11 with pip caching
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           cache: 'pip'
 
-      - name: 安装依赖
-        run: |
-          pip install -r requirements.txt
-          pip install pyside6 nuitka
+      # Cache Nuitka build artifacts to speed up builds
+      - name: Cache Nuitka artifacts
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Caches/Nuitka
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-nuitka-
 
-      - name: 安装构建工具
+      # Install all dependencies
+      - name: Install dependencies
         run: |
-          pip install ordered-set zstandard
-          brew install ccache
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyside6 nuitka
 
-      - name: 构建 macOS 应用包
+      # Install ccache for Nuitka
+      - name: Install ccache
+        run: brew install ccache
+
+      # Build macOS app bundle with Nuitka
+      - name: Build app bundle
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --macos-create-app-bundle --output-dir=dist --output-filename=PicMerge GUI.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --macos-create-app-bundle --noinclude-data-files=*.pyc,*.pyo --output-dir=dist GUI.py
 
-      - name: 打包应用
+      # Rename and package app bundle
+      - name: Package app bundle
         run: |
           cd dist
+          if [ -d "GUI.app" ]; then
+            mv GUI.app PicMerge.app
+          else
+            echo "Error: GUI.app not found"
+            exit 1
+          fi
           zip -r PicMerge-macOS.zip PicMerge.app
 
-      - name: 上传 macOS 构建产物
+      # Upload macOS artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build
+          name: PicMerge-macOS
           path: dist/PicMerge-macOS.zip
+          retention-days: 7
+          if-no-files-found: error
 
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 设置 Python
+      # Set up Python 3.11 with pip caching
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           cache: 'pip'
 
-      - name: 安装系统依赖
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgl1 libxcb-xinerama0 ccache patchelf
+      # Cache Nuitka build artifacts to speed up builds
+      - name: Cache Nuitka artifacts
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/Nuitka
+          key: ${{ runner.os }}-nuitka-${{ hashFiles('requirements.txt') }}
+          restore-keys: ${{ runner.os }}-nuitka-
 
-      - name: 安装 Python 依赖
+      # Install system and Python dependencies
+      - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install pyside6 nuitka ordered-set zstandard
+          sudo apt-get update -y
+          sudo apt-get install -y libxcb-xinerama0 libgl1
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyside6 nuitka
 
-      - name: 构建 Linux 可执行文件
+      # Build single-file executable with Nuitka
+      - name: Build executable
         run: |
-          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist --output-filename=PicMerge-Linux GUI.py
+          python -m nuitka --onefile --enable-plugin=pyside6 --output-dir=dist --output-filename=PicMerge-Linux GUI.py
 
-      - name: 准备 Linux 发布文件
-        run: |
-          chmod +x dist/PicMerge-Linux
+      # Make Linux binary executable
+      - name: Make binary executable
+        run: chmod +x dist/PicMerge-Linux
 
-      - name: 上传 Linux 构建产物
+      # Upload Linux artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-build
+          name: PicMerge-Linux
           path: dist/PicMerge-Linux
+          retention-days: 7
+          if-no-files-found: error
 
-  create-release:
-    # needs: [build-windows, build-macos, build-linux]
-    needs: [build-windows] 
+  create-prerelease:
+    needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: 下载构建产物
+      # Download all build artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: 创建预发布版本
+      # Delete existing preview release and tag
+      - name: Delete existing preview release
+        run: |
+          # Query GitHub API for existing preview release ID
+          RELEASE_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/preview" | jq -r '.id // empty')
+          if [ -n "$RELEASE_ID" ]; then
+            echo "Deleting preview release ID: $RELEASE_ID"
+            curl -s -X DELETE -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
+          fi
+          # Delete preview tag
+          git push origin :refs/tags/preview || true
+
+      # Create new pre-release
+      - name: Create pre-release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/windows-build/PicMerge.exe
-#            artifacts/macos-build/PicMerge-macOS.zip
-#            artifacts/linux-build/PicMerge-Linux
-          prerelease: true
-          generate_release_notes: true
           tag_name: preview
+          name: Preview Release
+          body: |
+            This is a manually triggered pre-release build of the project.
+            Contains single-file binaries for Windows and Linux, and a zipped app bundle for macOS.
+          prerelease: true
+          draft: false
+          files: |
+            artifacts/PicMerge-Windows/PicMerge-Windows.exe
+            artifacts/PicMerge-macOS/PicMerge-macOS.zip
+            artifacts/PicMerge-Linux/PicMerge-Linux
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
