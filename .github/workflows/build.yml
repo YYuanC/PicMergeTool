@@ -22,18 +22,16 @@ jobs:
       - name: 安装依赖
         run: |
           pip install -r requirements.txt
-          pip install pyside6 pyinstaller
+          pip install pyside6 nuitka
 
-      - name: 安装 UPX
+      - name: 安装构建工具
         run: |
-          $ProgressPreference = 'SilentlyContinue'
-          Invoke-WebRequest -Uri "https://github.com/upx/upx/releases/download/v4.2.1/upx-4.2.1-win64.zip" -OutFile "upx.zip"
-          Expand-Archive -Path "upx.zip" -DestinationPath "."
-          Move-Item -Path "upx-4.2.1-win64\upx.exe" -Destination "upx.exe"
+          pip install ordered-set zstandard
+          choco install -y ccache
 
       - name: 构建 Windows 可执行文件
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core;core" --upx-dir="./" --exclude-module=PyQt5 GUI.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --windows-disable-console --output-dir=dist --output-filename=PicMerge.exe GUI.py
 
       - name: 上传 Windows 构建产物
         uses: actions/upload-artifact@v4
@@ -55,15 +53,16 @@ jobs:
       - name: 安装依赖
         run: |
           pip install -r requirements.txt
-          pip install pyside6 pyinstaller
+          pip install pyside6 nuitka
 
-      - name: 安装 UPX
+      - name: 安装构建工具
         run: |
-          brew install upx
+          pip install ordered-set zstandard
+          brew install ccache
 
       - name: 构建 macOS 应用包
         run: |
-          pyinstaller --noconfirm --onefile --windowed --name "PicMerge" --add-data "core:core" --upx-dir="/usr/local/bin" --exclude-module=PyQt5 GUI.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --macos-create-app-bundle --output-dir=dist --output-filename=PicMerge GUI.py
 
       - name: 打包应用
         run: |
@@ -90,16 +89,16 @@ jobs:
       - name: 安装系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1 libxcb-xinerama0 upx
+          sudo apt-get install -y libgl1 libxcb-xinerama0 ccache patchelf
 
       - name: 安装 Python 依赖
         run: |
           pip install -r requirements.txt
-          pip install pyside6 pyinstaller
+          pip install pyside6 nuitka ordered-set zstandard
 
       - name: 构建 Linux 可执行文件
         run: |
-          pyinstaller --noconfirm --onefile --name "PicMerge-Linux" --add-data "core:core" --upx-dir="/usr/bin" GUI.py
+          python -m nuitka --standalone --enable-plugin=pyside6 --include-package=core --output-dir=dist --output-filename=PicMerge-Linux GUI.py
 
       - name: 准备 Linux 发布文件
         run: |
