@@ -508,7 +508,7 @@ class AdvancedPage(ScrollArea):
         gap_layout.setSpacing(15)
         gap_layout.setContentsMargins(20, 15, 20, 15)
         
-        gap_title = SubtitleLabel("图像间隔")
+        gap_title = SubtitleLabel("间隔")
         gap_title.setObjectName("CardTitle")
         gap_layout.addWidget(gap_title)
         
@@ -559,13 +559,13 @@ class AdvancedPage(ScrollArea):
         
         self.vBoxLayout.addWidget(gap_card)
         
-        # ===== 图像边框卡片 =====
+        # ===== 边框设置卡片 =====
         border_card = CardWidget()
         border_layout = QVBoxLayout(border_card)
         border_layout.setSpacing(15)
         border_layout.setContentsMargins(20, 15, 20, 15)
         
-        border_title = SubtitleLabel("图像边框")
+        border_title = SubtitleLabel("边框")
         border_title.setObjectName("CardTitle")
         border_layout.addWidget(border_title)
         
