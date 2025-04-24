@@ -64,12 +64,26 @@ def paste(_from, _to, box: Box):
     _to.paste(_from, box=box)
     return _to
 
+# 添加边框
+def add_final_border(image, h_border_width, v_border_width, border_color):
+    if h_border_width <= 0 and v_border_width <= 0:
+        return image
+        
+    width, height = image.size
+    new_width = width + 2 * h_border_width
+    new_height = height + 2 * v_border_width
+    
+    new_image = Image.new("RGB", (new_width, new_height), border_color)
+    new_image.paste(image, (h_border_width, v_border_width))
+    
+    return new_image
 
 
 # 文件名水平排列
 def mergeHorizon(progressBar, needTrim, allFiles: List, rows: int = 1, height: int = 512, 
                  needGap=False, gapColor=(255,255,255), gapWidth=10):
-    imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
+    imgs = [openWithRotateFromExif(f, needTrim) for f in allFiles]
+    
     total = len(imgs)
     cols = math.ceil(total / rows)
     base = geneJpg((1, 1))
@@ -97,7 +111,8 @@ def mergeHorizon(progressBar, needTrim, allFiles: List, rows: int = 1, height: i
 
 def mergeVertical(progressBar, needTrim, allFiles: List[str], cols: int = 1, width: int = 512,
                   needGap=False, gapColor=(255,255,255), gapWidth=10):
-    imgs = [openWithRotateFromExif(f,needTrim) for f in allFiles]
+    imgs = [openWithRotateFromExif(f, needTrim) for f in allFiles]
+    
     total = len(imgs)
     rows = math.ceil(total / cols)
     base = geneJpg((1, 1))
@@ -124,7 +139,8 @@ def mergeVertical(progressBar, needTrim, allFiles: List[str], cols: int = 1, wid
     return base
 
 def main(allFiles, direction, picNumOfDirection, TargetResolutionNum, outputPath, quality, 
-         progressBar, needTrim, needGap=False, gapColor=(255,255,255), gapWidth=10):
+         progressBar, needTrim, needGap=False, gapColor=(255,255,255), gapWidth=10,
+         needBorder=False, borderColor=(255,255,255), h_borderWidth=0, v_borderWidth=0):
     try:
         resultName = "图片拼接--%s--%s" % (time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime()), random.randint(1, 10000))
         result = Base(outputPath).childOf("%s.jpg" % resultName)
@@ -158,8 +174,11 @@ def main(allFiles, direction, picNumOfDirection, TargetResolutionNum, outputPath
                 gapWidth
             )
         
-        # 恢复原始的geneJpg函数
         geneJpg = original_geneJpg
+        
+        # 拼接完成后添加边框
+        if needBorder and (h_borderWidth > 0 or v_borderWidth > 0):
+            merged = add_final_border(merged, h_borderWidth, v_borderWidth, borderColor)
         
         merged.save(result.path, optimize=True, quality=quality, progressive=True, subsampling=1)
         return "图片已保存到 【%s】" % result.path

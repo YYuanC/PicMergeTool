@@ -26,7 +26,8 @@ class ProgressBarWorker(QThread):
 
     def __init__(self, files_bytes, direction, pic_num, target_resolution, 
                  output_path, quality, need_trim, need_gap=False, 
-                 gap_color=(255,255,255), gap_width=10):
+                 gap_color=(255,255,255), gap_width=10, need_border=False,
+                 border_color=(255,255,255), h_border_width=0, v_border_width=0):
         super().__init__()
         self.files_bytes = files_bytes
         self.direction = direction
@@ -38,6 +39,10 @@ class ProgressBarWorker(QThread):
         self.need_gap = need_gap
         self.gap_color = gap_color
         self.gap_width = gap_width
+        self.need_border = need_border
+        self.border_color = border_color
+        self.h_border_width = h_border_width
+        self.v_border_width = v_border_width
     
     def run(self):
         try:
@@ -62,7 +67,11 @@ class ProgressBarWorker(QThread):
                 self.need_trim,
                 self.need_gap,
                 self.gap_color,
-                self.gap_width
+                self.gap_width,
+                self.need_border,
+                self.border_color,
+                self.h_border_width,
+                self.v_border_width
             )
             
             self.completed.emit(result)
@@ -419,84 +428,218 @@ class AdvancedPage(ScrollArea):
         self.title.setObjectName("Title")
         self.vBoxLayout.addWidget(self.title)
         
-        # 高级设置卡片
-        settings_card = CardWidget()
-        settings_layout = QVBoxLayout(settings_card)
-        settings_layout.setSpacing(15)
+        # ===== 图像质量设置卡片 =====
+        image_quality_card = CardWidget()
+        quality_layout = QVBoxLayout(image_quality_card)
+        quality_layout.setSpacing(15)
+        quality_layout.setContentsMargins(20, 15, 20, 15)
+        
+        quality_title = SubtitleLabel("图像质量")
+        quality_title.setObjectName("CardTitle")
+        quality_layout.addWidget(quality_title)
         
         # 图片分辨率
         res_layout = QHBoxLayout()
-        res_layout.addWidget(BodyLabel("目标分辨率:"))
+        res_layout.setSpacing(10)
+        res_layout.setAlignment(Qt.AlignVCenter)
+        
+        res_label = BodyLabel("目标分辨率:")
+        res_label.setAlignment(Qt.AlignVCenter)
+        res_layout.addWidget(res_label)
         
         self.res_combo = ComboBox()
         self.res_combo.addItems(["8K", "4K", "2.7K", "1080P"])
         self.res_combo.setCurrentText("2.7K")
+        self.res_combo.setFixedWidth(120)
+        self.res_combo.setToolTip("选择输出图像的目标分辨率")
         self.res_combo.currentTextChanged.connect(self.parent_app.update_resolution)
         res_layout.addWidget(self.res_combo)
         res_layout.addStretch(1)
         
-        settings_layout.addLayout(res_layout)
+        quality_layout.addLayout(res_layout)
         
-        # 质量滑块后添加分隔线
-        quality_layout = QHBoxLayout()
-        quality_layout.addWidget(BodyLabel("质量:"))
+        # 质量滑块
+        quality_slider_layout = QHBoxLayout()
+        quality_slider_layout.setSpacing(10)
+        quality_slider_layout.setAlignment(Qt.AlignVCenter)
+        
+        quality_label = BodyLabel("质量:")
+        quality_label.setAlignment(Qt.AlignVCenter)
+        quality_slider_layout.addWidget(quality_label)
         
         self.quality_slider = Slider(Qt.Horizontal)
         self.quality_slider.setRange(0, 100)
         self.quality_slider.setValue(92)
+        self.quality_slider.setFixedWidth(300)
+        self.quality_slider.setToolTip("调整输出图像的压缩质量，越高质量越好但文件也越大")
         self.quality_slider.valueChanged.connect(self.parent_app.update_quality)
-        quality_layout.addWidget(self.quality_slider, 1)
+        quality_slider_layout.addWidget(self.quality_slider)
         
         self.quality_value_label = BodyLabel("92")
-        quality_layout.addWidget(self.quality_value_label)
+        self.quality_value_label.setAlignment(Qt.AlignVCenter)
+        quality_slider_layout.addWidget(self.quality_value_label)
+        quality_slider_layout.addStretch(1)
         
-        settings_layout.addLayout(quality_layout)
+        quality_layout.addLayout(quality_slider_layout)
         
-        # 添加分隔线
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        settings_layout.addWidget(separator)
+        self.vBoxLayout.addWidget(image_quality_card)
+        
+        # ===== 裁切设置卡片 =====
+        trim_card = CardWidget()
+        trim_layout = QVBoxLayout(trim_card)
+        trim_layout.setSpacing(15)
+        trim_layout.setContentsMargins(20, 15, 20, 15)
+        
+        trim_title = SubtitleLabel("裁切")
+        trim_title.setObjectName("CardTitle")
+        trim_layout.addWidget(trim_title)
         
         # 使用裁切选项
         self.trim_check = CheckBox("使用裁切为正方形")
+        self.trim_check.setToolTip("将每张图片裁切为正方形再进行拼接")
         self.trim_check.clicked.connect(self.parent_app.update_trim)
-        settings_layout.addWidget(self.trim_check)
+        trim_layout.addWidget(self.trim_check)
+        
+        self.vBoxLayout.addWidget(trim_card)
+        
+        # ===== 间隔设置卡片 =====
+        gap_card = CardWidget()
+        gap_layout = QVBoxLayout(gap_card)
+        gap_layout.setSpacing(15)
+        gap_layout.setContentsMargins(20, 15, 20, 15)
+        
+        gap_title = SubtitleLabel("图像间隔")
+        gap_title.setObjectName("CardTitle")
+        gap_layout.addWidget(gap_title)
         
         # 间隔设置
-        gap_layout = QHBoxLayout()
+        gap_check_layout = QHBoxLayout()
         self.gap_check = CheckBox("添加间隔")
+        self.gap_check.setToolTip("在图片之间添加间隔")
         self.gap_check.clicked.connect(self.parent_app.update_gap)
-        gap_layout.addWidget(self.gap_check)
+        gap_check_layout.addWidget(self.gap_check)
         
         # 间隔颜色选择
         self.gap_color_combo = ComboBox()
         self.gap_color_combo.addItems(["白边", "黑边"])
         self.gap_color_combo.setCurrentText("白边")
+        self.gap_color_combo.setFixedWidth(80)
         self.gap_color_combo.setEnabled(False)
+        self.gap_color_combo.setToolTip("选择间隔的颜色")
         self.gap_color_combo.currentTextChanged.connect(self.parent_app.update_gap_color)
-        gap_layout.addWidget(self.gap_color_combo)
+        gap_check_layout.addWidget(self.gap_color_combo)
         
-        gap_layout.addStretch(1)
-        settings_layout.addLayout(gap_layout)
+        gap_check_layout.addStretch(1)
+        gap_layout.addLayout(gap_check_layout)
         
         # 间隔宽度滑块
         gap_width_layout = QHBoxLayout()
-        gap_width_layout.addWidget(BodyLabel("间隔宽度:"))
+        gap_width_layout.setSpacing(10)
+        gap_width_layout.setAlignment(Qt.AlignVCenter)
+        
+        gap_width_label = BodyLabel("间隔宽度:")
+        gap_width_label.setAlignment(Qt.AlignVCenter)
+        gap_width_layout.addWidget(gap_width_label)
         
         self.gap_width_slider = Slider(Qt.Horizontal)
-        self.gap_width_slider.setRange(0, 50)  # 设置范围为0到50
-        self.gap_width_slider.setValue(0)  # 默认值设置为0
-        self.gap_width_slider.setEnabled(False)  # 初始禁用
+        self.gap_width_slider.setRange(0, 50)
+        self.gap_width_slider.setValue(0)
+        self.gap_width_slider.setEnabled(False)
+        self.gap_width_slider.setFixedWidth(300)
+        self.gap_width_slider.setToolTip("调整图片之间的间隔宽度")
         self.gap_width_slider.valueChanged.connect(self.parent_app.update_gap_width)
-        gap_width_layout.addWidget(self.gap_width_slider, 1)
+        gap_width_layout.addWidget(self.gap_width_slider)
         
-        self.gap_width_value_label = BodyLabel("0")  # 初始显示为0
+        self.gap_width_value_label = BodyLabel("0")
+        self.gap_width_value_label.setAlignment(Qt.AlignVCenter)
         gap_width_layout.addWidget(self.gap_width_value_label)
+        gap_width_layout.addStretch(1)
         
-        settings_layout.addLayout(gap_width_layout)
+        gap_layout.addLayout(gap_width_layout)
         
-        self.vBoxLayout.addWidget(settings_card)
+        self.vBoxLayout.addWidget(gap_card)
+        
+        # ===== 图像边框卡片 =====
+        border_card = CardWidget()
+        border_layout = QVBoxLayout(border_card)
+        border_layout.setSpacing(15)
+        border_layout.setContentsMargins(20, 15, 20, 15)
+        
+        border_title = SubtitleLabel("图像边框")
+        border_title.setObjectName("CardTitle")
+        border_layout.addWidget(border_title)
+        
+        # 添加边框设置
+        border_check_layout = QHBoxLayout()
+        self.border_check = CheckBox("添加边框")
+        self.border_check.setToolTip("在合成图片外围添加边框")
+        self.border_check.clicked.connect(self.parent_app.update_border)
+        border_check_layout.addWidget(self.border_check)
+        
+        # 边框颜色选择
+        self.border_color_combo = ComboBox()
+        self.border_color_combo.addItems(["白边", "黑边"])
+        self.border_color_combo.setCurrentText("白边")
+        self.border_color_combo.setFixedWidth(80)
+        self.border_color_combo.setEnabled(False)
+        self.border_color_combo.setToolTip("选择边框的颜色")
+        self.border_color_combo.currentTextChanged.connect(self.parent_app.update_border_color)
+        border_check_layout.addWidget(self.border_color_combo)
+        
+        border_check_layout.addStretch(1)
+        border_layout.addLayout(border_check_layout)
+        
+        # 水平边框宽度滑块
+        h_border_width_layout = QHBoxLayout()
+        h_border_width_layout.setSpacing(10)
+        h_border_width_layout.setAlignment(Qt.AlignVCenter)
+        
+        h_border_width_label = BodyLabel("左右边框宽度:")
+        h_border_width_label.setAlignment(Qt.AlignVCenter)
+        h_border_width_layout.addWidget(h_border_width_label)
+        
+        self.h_border_width_slider = Slider(Qt.Horizontal)
+        self.h_border_width_slider.setRange(0, 100)
+        self.h_border_width_slider.setValue(0)
+        self.h_border_width_slider.setEnabled(False)
+        self.h_border_width_slider.setFixedWidth(300)
+        self.h_border_width_slider.setToolTip("调整合成图片左右两侧的边框宽度")
+        self.h_border_width_slider.valueChanged.connect(self.parent_app.update_h_border_width)
+        h_border_width_layout.addWidget(self.h_border_width_slider)
+        
+        self.h_border_width_value_label = BodyLabel("0")
+        self.h_border_width_value_label.setAlignment(Qt.AlignVCenter)
+        h_border_width_layout.addWidget(self.h_border_width_value_label)
+        h_border_width_layout.addStretch(1)
+        
+        border_layout.addLayout(h_border_width_layout)
+        
+        # 垂直边框宽度滑块
+        v_border_width_layout = QHBoxLayout()
+        v_border_width_layout.setSpacing(10)
+        v_border_width_layout.setAlignment(Qt.AlignVCenter)
+        
+        v_border_width_label = BodyLabel("上下边框宽度:")
+        v_border_width_label.setAlignment(Qt.AlignVCenter)
+        v_border_width_layout.addWidget(v_border_width_label)
+        
+        self.v_border_width_slider = Slider(Qt.Horizontal)
+        self.v_border_width_slider.setRange(0, 100)
+        self.v_border_width_slider.setValue(0)
+        self.v_border_width_slider.setEnabled(False)
+        self.v_border_width_slider.setFixedWidth(300)
+        self.v_border_width_slider.setToolTip("调整合成图片上下两侧的边框宽度")
+        self.v_border_width_slider.valueChanged.connect(self.parent_app.update_v_border_width)
+        v_border_width_layout.addWidget(self.v_border_width_slider)
+        
+        self.v_border_width_value_label = BodyLabel("0")
+        self.v_border_width_value_label.setAlignment(Qt.AlignVCenter)
+        v_border_width_layout.addWidget(self.v_border_width_value_label)
+        v_border_width_layout.addStretch(1)
+        
+        border_layout.addLayout(v_border_width_layout)
+        
+        self.vBoxLayout.addWidget(border_card)
         
         # 添加弹性空间
         self.vBoxLayout.addStretch(1)
@@ -522,9 +665,13 @@ class PicMergeApp(FluentWindow):
         self.quality = 92
         self.uploaded_files = []
         self.needSort = True
-        self.needGap = False        # 添加间隔属性初始化
-        self.gapColor = (255, 255, 255)  # 添加间隔颜色属性初始化（默认白色）
-        self.gapWidth = 10         # 添加间隔宽度属性初始化
+        self.needGap = False
+        self.gapColor = (255, 255, 255)
+        self.gapWidth = 10
+        self.needBorder = False
+        self.borderColor = (255, 255, 255)
+        self.h_borderWidth = 0
+        self.v_borderWidth = 0
         
         # 设置临时目录路径
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -771,6 +918,45 @@ class PicMergeApp(FluentWindow):
         self.gapWidth = self.advanced_page.gap_width_slider.value()
         self.advanced_page.gap_width_value_label.setText(str(self.gapWidth))
     
+    def update_border(self):
+        """更新边框设置"""
+        self.needBorder = self.advanced_page.border_check.isChecked()
+        # 同时更新颜色选择和宽度滑块的启用状态
+        self.advanced_page.border_color_combo.setEnabled(self.needBorder)
+        self.advanced_page.h_border_width_slider.setEnabled(self.needBorder)
+        self.advanced_page.h_border_width_value_label.setEnabled(self.needBorder)
+        self.advanced_page.v_border_width_slider.setEnabled(self.needBorder)
+        self.advanced_page.v_border_width_value_label.setEnabled(self.needBorder)
+        
+        # 设置滑动条禁用状态的样式
+        if not self.needBorder:
+            self.advanced_page.h_border_width_slider.setProperty('disabled', True)
+            self.advanced_page.v_border_width_slider.setProperty('disabled', True)
+        else:
+            self.advanced_page.h_border_width_slider.setProperty('disabled', False)
+            self.advanced_page.v_border_width_slider.setProperty('disabled', False)
+        
+        # 强制更新样式
+        self.advanced_page.h_border_width_slider.style().unpolish(self.advanced_page.h_border_width_slider)
+        self.advanced_page.h_border_width_slider.style().polish(self.advanced_page.h_border_width_slider)
+        self.advanced_page.v_border_width_slider.style().unpolish(self.advanced_page.v_border_width_slider)
+        self.advanced_page.v_border_width_slider.style().polish(self.advanced_page.v_border_width_slider)
+    
+    def update_border_color(self):
+        """更新边框颜色"""
+        color = self.advanced_page.border_color_combo.currentText()
+        self.borderColor = (255, 255, 255) if color == "白边" else (0, 0, 0)
+    
+    def update_h_border_width(self):
+        """更新水平边框宽度"""
+        self.h_borderWidth = self.advanced_page.h_border_width_slider.value()
+        self.advanced_page.h_border_width_value_label.setText(str(self.h_borderWidth))
+    
+    def update_v_border_width(self):
+        """更新垂直边框宽度"""
+        self.v_borderWidth = self.advanced_page.v_border_width_slider.value()
+        self.advanced_page.v_border_width_value_label.setText(str(self.v_borderWidth))
+    
     def generate(self):
         """生成合并图片"""
         if not self.uploaded_files:
@@ -805,7 +991,11 @@ class PicMergeApp(FluentWindow):
             self.needTrim,
             self.needGap, 
             self.gapColor,
-            self.gapWidth 
+            self.gapWidth,
+            self.needBorder,
+            self.borderColor,
+            self.h_borderWidth,
+            self.v_borderWidth
         )
         
         self.worker.progress_update.connect(self.update_progress)
@@ -820,8 +1010,29 @@ class PicMergeApp(FluentWindow):
         """显示处理结果"""
         self.update_progress(100, "完成")
         self.basic_page.status_label.setText(result)
+        
+        self.basic_page.generate_button.setText("浏览")
         self.basic_page.generate_button.setEnabled(True)
-        QTimer.singleShot(3000, lambda: self.update_progress(0, ""))
+        # 正确地断开信号连接
+        try:
+            self.basic_page.generate_button.clicked.disconnect(self.generate)
+        except:
+            pass
+        self.basic_page.generate_button.clicked.connect(self.open_output_path)
+        
+        # 5秒后恢复按钮状态
+        QTimer.singleShot(5000, self.reset_generate_button)
+    
+    def reset_generate_button(self):
+        """恢复生成按钮状态"""
+        self.update_progress(0, "")
+        self.basic_page.generate_button.setText("生成")
+        # 正确地断开信号连接
+        try:
+            self.basic_page.generate_button.clicked.disconnect(self.open_output_path)
+        except:
+            pass
+        self.basic_page.generate_button.clicked.connect(self.generate)
     
     def dragEnterEvent(self, event: QDragEnterEvent):
         """拖拽进入事件"""
