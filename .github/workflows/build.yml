@@ -2,6 +2,17 @@ name: Build and Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release Type'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - preview
+          - release
+  release:
+    types: [created]
 
 jobs:
   build-windows:
@@ -10,6 +21,8 @@ jobs:
       # Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       # Set up Python 3.11 with pip caching
       - name: Set up Python
@@ -62,6 +75,8 @@ jobs:
       # Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       # Set up Python 3.11 with pip caching
       - name: Set up Python
@@ -120,6 +135,8 @@ jobs:
       # Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
 
       # Set up Python 3.11 with pip caching
       - name: Set up Python
@@ -162,7 +179,7 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  create-prerelease:
+  create-release:
     needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     permissions:
@@ -178,30 +195,63 @@ jobs:
         with:
           path: artifacts
 
-      # Delete existing preview release and tag
-      - name: Delete existing preview release
+      # 处理从GitHub Release触发的正式版本
+      - name: Handle GitHub Release
+        if: ${{ github.event_name == 'release' }}
         run: |
-          # Query GitHub API for existing preview release ID
+          echo "TAG_NAME=${{ github.event.release.tag_name }}" >> $GITHUB_ENV
+          echo "RELEASE_NAME=${{ github.event.release.name }}" >> $GITHUB_ENV
+          # Release body will be used directly in the release step
+          echo "PRERELEASE=${{ github.event.release.prerelease }}" >> $GITHUB_ENV
+
+      # 处理手动触发的正式版本
+      - name: Handle manual release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type == 'release' }}
+        run: |
+          VERSION=$(date +'v%Y.%m.%d')
+          echo "TAG_NAME=$VERSION" >> $GITHUB_ENV
+          echo "RELEASE_NAME=PicMerge $VERSION" >> $GITHUB_ENV
+          {
+            echo 'RELEASE_BODY<<EOF'
+            echo "This is an official release of PicMerge."
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          echo "PRERELEASE=false" >> $GITHUB_ENV
+
+      # 处理预览版本
+      - name: Handle preview release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_type == 'preview' }}
+        run: |
+          # 删除现有预览版本和标签
           RELEASE_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/releases/tags/preview" | jq -r '.id // empty')
           if [ -n "$RELEASE_ID" ]; then
-            echo "Deleting preview release ID: $RELEASE_ID"
+            echo "删除预览版本ID: $RELEASE_ID"
             curl -s -X DELETE -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
               "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID"
           fi
-          # Delete preview tag
+          # 删除预览标签
           git push origin :refs/tags/preview || true
+          
+          # 设置发布变量
+          echo "TAG_NAME=preview" >> $GITHUB_ENV
+          echo "RELEASE_NAME=Preview Release" >> $GITHUB_ENV
+          {
+            echo 'RELEASE_BODY<<EOF'
+            echo "This is a manually triggered pre-release build of the project."
+            echo "Contains single-file binaries for Windows and Linux, and a zipped app bundle for macOS."
+            echo 'EOF'
+          } >> $GITHUB_ENV
+          echo "PRERELEASE=true" >> $GITHUB_ENV
 
-      # Create new pre-release
-      - name: Create pre-release
+      # 创建/更新发布
+      - name: Create/Update release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: preview
-          name: Preview Release
-          body: |
-            This is a manually triggered pre-release build of the project.
-            Contains single-file binaries for Windows and Linux, and a zipped app bundle for macOS.
-          prerelease: true
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.RELEASE_NAME }}
+          body: ${{ github.event_name == 'release' && github.event.release.body || env.RELEASE_BODY }}
+          prerelease: ${{ env.PRERELEASE }}
           draft: false
           files: |
             artifacts/PicMerge-Windows/PicMerge-Windows.exe
